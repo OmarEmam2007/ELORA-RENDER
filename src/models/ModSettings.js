@@ -1,0 +1,20 @@
+const mongoose = require('mongoose');
+
+const modSettingsSchema = new mongoose.Schema({
+    guildId: { type: String, required: true, unique: true },
+    enabled: { type: Boolean, default: true },
+    logChannelId: { type: String, default: null },
+    sensitivity: { type: Number, default: 3 }, // 1-5
+    multilingual: { type: Boolean, default: true },
+    learningMode: { type: Boolean, default: true },
+    whitelistRoles: { type: [String], default: [] },
+    whitelistChannels: { type: [String], default: [] },
+    customBlacklist: { type: [String], default: [] },
+    autoActions: {
+        mild: { type: String, default: 'warn' }, // warn, delete
+        severe: { type: String, default: 'timeout' }, // timeout, delete
+        extreme: { type: String, default: 'ban' } // ban
+    }
+});
+
+module.exports = mongoose.model('ModSettings', modSettingsSchema);
