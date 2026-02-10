@@ -15,36 +15,34 @@ const play = require('play-dl');
 
 async function initializePlayDL() {
     try {
-        // 1. استدعاء الكوكيز من Variable اللي أنت ضفته في Railway
-        const ytCookies = process.env.YT_COOKIES;
+        const rawCookies = process.env.YT_COOKIES;
 
-        if (ytCookies) {
+        if (rawCookies) {
             try {
-                // لو الكوكيز عبارة عن نص JSON طويل
-                const parsedCookies = JSON.parse(ytCookies);
-                await play.setToken({ youtube: { cookie: parsedCookies } });
-                console.log("✅ [COOKIES] Loaded from Environment Variables!");
+                // تحويل النص اللي جاي من Railway لـ JSON Array
+                const cookiesArray = JSON.parse(rawCookies);
+                await play.setToken({ 
+                    youtube: { 
+                        cookie: cookiesArray 
+                    } 
+                });
+                console.log("✅ [COOKIES] Successfully loaded into Play-DL");
             } catch (e) {
-                // لو الكوكيز نص عادي (Netscape format) مش JSON
-                await play.setToken({ youtube: { cookie: ytCookies } });
-                console.log("✅ [COOKIES] Loaded as raw text!");
+                console.error("❌ Cookies Parsing Error: Make sure YT_COOKIES is a valid JSON array");
             }
-        } else {
-            console.warn("⚠️ No YT_COOKIES found in Environment Variables!");
         }
-
-        // 2. البروكسي (اختياري - يفضل تعطيله لو الكوكيز اشتغلت)
-        // await play.setToken({ youtube: { proxy: "http://178.170.43.129:8082" } });
 
         await play.setToken({
             user_agent: ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36']
         });
         
-        console.log("✅ Play-DL Ready!");
+        console.log("✅ Play-DL is ready with your account cookies!");
     } catch (error) {
-        console.error("❌ Final Setup error:", error.message);
+        console.error("❌ Setup error:", error.message);
     }
 }
+
+
 class MusicService {
     constructor(client, options = {}) {
         this.client = client;
