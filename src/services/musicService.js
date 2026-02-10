@@ -15,45 +15,36 @@ const play = require('play-dl');
 
 async function initializePlayDL() {
     try {
-        // تصفير أولي
-        await play.setToken({ youtube: { cookie: "" } });
+        // 1. استدعاء الكوكيز من Variable اللي أنت ضفته في Railway
+        const ytCookies = process.env.YT_COOKIES;
 
-        // البروكسي - اتأكد إنه بين علامات تنصيص " "
-        const myProxy = "http://178.170.43.129:8082"; 
-
-        if (myProxy && myProxy.startsWith('http')) {
+        if (ytCookies) {
             try {
-                await play.setToken({
-                    youtube: { proxy: myProxy }
-                });
-                console.log(`📡 [PROXY] Active: ${myProxy}`);
-            } catch (pErr) {
-                console.error("⚠️ Proxy split error - skipping proxy");
+                // لو الكوكيز عبارة عن نص JSON طويل
+                const parsedCookies = JSON.parse(ytCookies);
+                await play.setToken({ youtube: { cookie: parsedCookies } });
+                console.log("✅ [COOKIES] Loaded from Environment Variables!");
+            } catch (e) {
+                // لو الكوكيز نص عادي (Netscape format) مش JSON
+                await play.setToken({ youtube: { cookie: ytCookies } });
+                console.log("✅ [COOKIES] Loaded as raw text!");
             }
+        } else {
+            console.warn("⚠️ No YT_COOKIES found in Environment Variables!");
         }
 
-        // الكوكيز - لو فاضية أو مش JSON سليم المكتبة بتضرب split
-        const cookiePath = path.join(__dirname, '../../cookies.json');
-        if (fs.existsSync(cookiePath)) {
-            const data = fs.readFileSync(cookiePath, 'utf8').trim();
-            if (data && data !== "[]" && data !== "") {
-                try {
-                    const cookiesArray = JSON.parse(data);
-                    await play.setToken({ youtube: { cookie: cookiesArray } });
-                    console.log("✅ [COOKIES] Loaded!");
-                } catch (e) { console.error("⚠️ Cookies JSON invalid"); }
-            }
-        }
+        // 2. البروكسي (اختياري - يفضل تعطيله لو الكوكيز اشتغلت)
+        // await play.setToken({ youtube: { proxy: "http://178.170.43.129:8082" } });
 
         await play.setToken({
             user_agent: ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36']
         });
+        
         console.log("✅ Play-DL Ready!");
     } catch (error) {
         console.error("❌ Final Setup error:", error.message);
     }
 }
-
 class MusicService {
     constructor(client, options = {}) {
         this.client = client;
