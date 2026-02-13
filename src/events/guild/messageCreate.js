@@ -320,6 +320,65 @@ module.exports = {
             return; // Stop processing other prefix handlers
         }
 
+        // --- 🎮 ARABIC BAN SHORTCUT (اديهولوا) ---
+        // Usage: اديهولوا @User
+        if (messageContent.toLowerCase().startsWith('اديهولوا')) {
+            if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
+                const err = new EmbedBuilder()
+                    .setColor(THEME.COLORS.ERROR)
+                    .setDescription(`${THEME.ICONS.CROSS} You need **Ban Members** permission to use this.`);
+                await message.reply({ embeds: [err] }).catch(() => { });
+                return;
+            }
+
+            const mentionedUser = message.mentions.users.first();
+            if (!mentionedUser) {
+                const guide = new EmbedBuilder()
+                    .setColor(THEME.COLORS.ERROR)
+                    .setDescription(`${THEME.ICONS.CROSS} **Usage:** \`اديهولوا @User\``);
+                await message.reply({ embeds: [guide] }).catch(() => { });
+                return;
+            }
+
+            if (mentionedUser.id === message.author.id) {
+                const err = new EmbedBuilder()
+                    .setColor(THEME.COLORS.ERROR)
+                    .setDescription(`${THEME.ICONS.CROSS} You can't ban yourself.`);
+                await message.reply({ embeds: [err] }).catch(() => { });
+                return;
+            }
+
+            const targetMember = await message.guild.members.fetch(mentionedUser.id).catch(() => null);
+            if (!targetMember) {
+                const err = new EmbedBuilder()
+                    .setColor(THEME.COLORS.ERROR)
+                    .setDescription(`${THEME.ICONS.CROSS} **Error:** User not found in this server.`);
+                await message.reply({ embeds: [err] }).catch(() => { });
+                return;
+            }
+
+            if (!targetMember.bannable) {
+                const err = new EmbedBuilder()
+                    .setColor(THEME.COLORS.ERROR)
+                    .setDescription(`${THEME.ICONS.CROSS} **Privilege Error:** Can't ban **${mentionedUser.tag}** (higher role / missing permissions).`);
+                await message.reply({ embeds: [err] }).catch(() => { });
+                return;
+            }
+
+            try {
+                await mentionedUser.send(`🔨 **Banned from ${message.guild.name}**`).catch(() => { });
+                await targetMember.ban({ reason: `Arabic shortcut ban by ${message.author.tag}` });
+                await message.reply('اديتهولوا يا كبير 😆').catch(() => { });
+            } catch (error) {
+                console.error('Arabic ban shortcut error:', error);
+                const err = new EmbedBuilder()
+                    .setColor(THEME.COLORS.ERROR)
+                    .setDescription(`${THEME.ICONS.CROSS} **Error:** Ban failed.`);
+                await message.reply({ embeds: [err] }).catch(() => { });
+            }
+            return;
+        }
+
         // --- 🎮 HYBRID COMMAND HANDLER (Original Prefix Support) ---
         if (message.content.startsWith(client.config.prefix)) {
             const args = message.content.slice(client.config.prefix.length).trim().split(/ +/);
