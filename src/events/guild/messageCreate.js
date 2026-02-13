@@ -8,6 +8,7 @@ const { analyzeMessage } = require('../../utils/moderation/coreDetector');
 const { createLogEmbed } = require('../../utils/moderation/modernLogger');
 const { logDetection } = require('../../utils/moderation/patternLearner');
 const THEME = require('../../utils/theme');
+const heistCommand = require('../../commands/economy/heist');
 
 // Global buffer initialization (if not exists)
 if (!global.messageBuffer) global.messageBuffer = [];
@@ -254,13 +255,22 @@ module.exports = {
             }
         }
 
+        // --- 🔐 SOVEREIGN HEIST KEYWORD LISTENER ---
+        try {
+            if (heistCommand && typeof heistCommand.handleMessage === 'function') {
+                await heistCommand.handleMessage(message);
+            }
+        } catch (e) {
+            console.error('Heist handleMessage error:', e);
+        }
+
         // --- 🎮 ELORA PREFIX COMMAND HANDLER ---
         const messageContent = message.content.trim();
         const eloraPrefix = /^elora\s+/i;
         
         if (eloraPrefix.test(messageContent)) {
             // Check if user is jailed (role or database)
-            const JAILED_ROLE = '1467467538551279769';
+            const JAILED_ROLE = process.env.JAILED_ROLE_ID || '1467467538551279769';
             let userProfile = await User.findOne({ userId: message.author.id, guildId: message.guild.id }).catch(() => null);
             
             // Check role

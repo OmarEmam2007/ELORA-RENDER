@@ -120,6 +120,14 @@ module.exports = {
                 }
             }
 
+            // --- Sovereign Heist Buttons ---
+            if (interaction.customId.startsWith('heist_')) {
+                const heistCommand = require('../../commands/economy/heist');
+                if (heistCommand.handleButton) {
+                    return heistCommand.handleButton(interaction);
+                }
+            }
+
             // --- Verification Button ---
             if (interaction.customId === 'verify_astray') {
                 const roleId = client.config.astrayRoleId;
