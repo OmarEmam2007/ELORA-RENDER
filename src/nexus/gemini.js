@@ -2,8 +2,8 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // Use the API Key from env
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-// Use a stable, supported model
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+// Use a widely supported text model for v1beta
+const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
 
 /**
  * Generates a Mythical Title and Backstory for a user based on their profile.
