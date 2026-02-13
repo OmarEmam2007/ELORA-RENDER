@@ -90,60 +90,77 @@ class MusicService {
         return connection;
     }
 
-    // --- تعديل دالة البحث للهروب من الحظر ---
-async _resolveQuery(query) {
-    try {
-        // لو اللينك يوتيوب، هاته مباشرة
-        if (play.yt_validate(query) === 'video') {
-            const videoInfo = await play.video_info(query, { check_all_status: false });
-            return { 
-                url: videoInfo.video_details.url, 
-                title: videoInfo.video_details.title, 
-                thumbnail: videoInfo.video_details.thumbnails?.[0]?.url, 
-                duration: videoInfo.video_details.durationInSec 
-            };
-        } 
-        
-        // لو مش لينك، ابحث في يوتيوب
-        const searchResults = await play.search(query, { limit: 1, source: { youtube: 'video' } });
-        if (searchResults && searchResults.length > 0) {
-            return { 
-                url: searchResults[0].url, 
-                title: searchResults[0].title, 
-                thumbnail: searchResults[0].thumbnails?.[0]?.url, 
-                duration: searchResults[0].durationInSec 
-            };
-        }
-        throw new Error('No YouTube results');
-    } catch (error) {
-        console.warn('⚠️ YT Failed, switching to SoundCloud for:', query);
-        // محاولة ساوند كلاود
-        const sc = await play.search(query, { limit: 1, source: { soundcloud: 'tracks' } }).catch(() => []);
-        if (sc && sc.length > 0 && sc[0].url) {
-            return { 
-                url: sc[0].url, 
-                title: "[SC] " + (sc[0].name || sc[0].title), 
-                thumbnail: sc[0].thumbnail, 
-                duration: sc[0].durationInSec 
-            };
-        }
-        throw new Error("All sources blocked.");
-    }
-}
+    // --- تعديل دالة البحث للهروب من الحظر + حماية من URLs فاسدة ---
+    async _resolveQuery(query) {
+        try {
+            // لو اللينك يوتيوب، هاته مباشرة
+            if (play.yt_validate(query) === 'video') {
+                const videoInfo = await play.video_info(query, { check_all_status: false });
+                const url = videoInfo?.video_details?.url;
 
-    // --- تعديل دالة جلب الصوت لتقليل الحظر ---
-async _getAudioUrl(videoUrl) {
-    if (!videoUrl || typeof videoUrl !== 'string') {
-        throw new Error('Invalid or missing URL for streaming');
+                if (!url || typeof url !== 'string' || url === 'undefined') {
+                    throw new Error('Invalid YouTube URL returned for this video');
+                }
+
+                return {
+                    url,
+                    title: videoInfo.video_details.title,
+                    thumbnail: videoInfo.video_details.thumbnails?.[0]?.url,
+                    duration: videoInfo.video_details.durationInSec
+                };
+            }
+
+            // لو مش لينك، ابحث في يوتيوب
+            const searchResults = await play.search(query, { limit: 1, source: { youtube: 'video' } });
+            if (searchResults && searchResults.length > 0) {
+                const first = searchResults[0];
+                const url = first?.url;
+
+                if (!url || typeof url !== 'string' || url === 'undefined') {
+                    throw new Error('Invalid YouTube search result URL');
+                }
+
+                return {
+                    url,
+                    title: first.title,
+                    thumbnail: first.thumbnails?.[0]?.url,
+                    duration: first.durationInSec
+                };
+            }
+            throw new Error('No YouTube results');
+        } catch (error) {
+            console.warn('⚠️ YT Failed, switching to SoundCloud for:', query, '| Reason:', error?.message || error);
+            // محاولة ساوند كلاود
+            const sc = await play.search(query, { limit: 1, source: { soundcloud: 'tracks' } }).catch(() => []);
+            if (sc && sc.length > 0) {
+                const first = sc[0];
+                const url = first?.url;
+                if (url && typeof url === 'string' && url !== 'undefined') {
+                    return {
+                        url,
+                        title: "[SC] " + (first.name || first.title),
+                        thumbnail: first.thumbnail,
+                        duration: first.durationInSec
+                    };
+                }
+            }
+            throw new Error("All sources blocked.");
+        }
     }
-    
-    return await play.stream(videoUrl, { 
-        quality: 0, 
-        discordPlayerCompatibility: true, 
-        htmert: false,
-        fallback: true
-    });
-}
+
+    // --- تعديل دالة جلب الصوت لتقليل الحظر + حماية من URLs فاسدة ---
+    async _getAudioUrl(videoUrl) {
+        if (!videoUrl || typeof videoUrl !== 'string' || videoUrl === 'undefined') {
+            throw new Error('Invalid or missing URL for streaming');
+        }
+        
+        return await play.stream(videoUrl, { 
+            quality: 0, 
+            discordPlayerCompatibility: true, 
+            htmert: false,
+            fallback: true
+        });
+    }
 
     async _playNow(guildId, track) {
         const state = this._getState(guildId);
