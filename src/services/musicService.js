@@ -90,36 +90,39 @@ class MusicService {
         return connection;
     }
 
-    // --- تعديل دالة البحث للهروب من الحظر + حماية من URLs فاسدة ---
+    // --- مصدر وحيد: SoundCloud أولاً لتفادي مشاكل يوتيوب / DNS ---
     async _resolveQuery(query) {
-        try {
-            // لو اللينك يوتيوب، هاته مباشرة
-            if (play.yt_validate(query) === 'video') {
-                const videoInfo = await play.video_info(query, { check_all_status: false });
-                const url = videoInfo?.video_details?.url;
+        // 1) حاول تجيب تراك من ساوند كلاود أولاً (أكثر ثباتاً على Railway)
+        const scResults = await play.search(query, {
+            limit: 1,
+            source: { soundcloud: 'tracks' }
+        }).catch(() => []);
 
-                if (!url || typeof url !== 'string' || url === 'undefined') {
-                    throw new Error('Invalid YouTube URL returned for this video');
-                }
+        if (scResults && scResults.length > 0) {
+            const first = scResults[0];
+            const url = first?.url;
 
+            if (url && typeof url === 'string' && url !== 'undefined') {
                 return {
                     url,
-                    title: videoInfo.video_details.title,
-                    thumbnail: videoInfo.video_details.thumbnails?.[0]?.url,
-                    duration: videoInfo.video_details.durationInSec
+                    title: "[SC] " + (first.name || first.title),
+                    thumbnail: first.thumbnail,
+                    duration: first.durationInSec
                 };
             }
+        }
 
-            // لو مش لينك، ابحث في يوتيوب
-            const searchResults = await play.search(query, { limit: 1, source: { youtube: 'video' } });
-            if (searchResults && searchResults.length > 0) {
-                const first = searchResults[0];
-                const url = first?.url;
+        // 2) آخر محاولة: بحث خفيف في يوتيوب (قد ينجح على بعض الأغاني)
+        const ytResults = await play.search(query, {
+            limit: 1,
+            source: { youtube: 'video' }
+        }).catch(() => []);
 
-                if (!url || typeof url !== 'string' || url === 'undefined') {
-                    throw new Error('Invalid YouTube search result URL');
-                }
+        if (ytResults && ytResults.length > 0) {
+            const first = ytResults[0];
+            const url = first?.url;
 
+            if (url && typeof url === 'string' && url !== 'undefined') {
                 return {
                     url,
                     title: first.title,
@@ -127,25 +130,9 @@ class MusicService {
                     duration: first.durationInSec
                 };
             }
-            throw new Error('No YouTube results');
-        } catch (error) {
-            console.warn('⚠️ YT Failed, switching to SoundCloud for:', query, '| Reason:', error?.message || error);
-            // محاولة ساوند كلاود
-            const sc = await play.search(query, { limit: 1, source: { soundcloud: 'tracks' } }).catch(() => []);
-            if (sc && sc.length > 0) {
-                const first = sc[0];
-                const url = first?.url;
-                if (url && typeof url === 'string' && url !== 'undefined') {
-                    return {
-                        url,
-                        title: "[SC] " + (first.name || first.title),
-                        thumbnail: first.thumbnail,
-                        duration: first.durationInSec
-                    };
-                }
-            }
-            throw new Error("All sources blocked.");
         }
+
+        throw new Error('No playable results from SoundCloud or YouTube.');
     }
 
     // --- تعديل دالة جلب الصوت لتقليل الحظر + حماية من URLs فاسدة ---
