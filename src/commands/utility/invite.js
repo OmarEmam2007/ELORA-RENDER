@@ -4,7 +4,7 @@ const THEME = require('../../utils/theme');
 
 module.exports = {
     name: 'invite',
-    aliases: ['inv'],
+    aliases: [],
     async execute(message, client, args) {
         const target = message.mentions.users.first() || message.author;
 
