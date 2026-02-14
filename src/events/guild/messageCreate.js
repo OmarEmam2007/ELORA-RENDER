@@ -269,6 +269,19 @@ module.exports = {
         const eloraPrefix = /^elora\s+/i;
         
         if (eloraPrefix.test(messageContent)) {
+            // --- 💬 ELORA PHRASE RESPONDER ---
+            // Handles: "elora do you love me" / "elora do u love me"
+            const lowered = messageContent.toLowerCase();
+            if (lowered === 'elora do you love me' || lowered === 'elora do u love me') {
+                const OWNER_ROLE_ID = '1461766723274412126';
+                const hasOwnerRole = message.member?.roles?.cache?.has(OWNER_ROLE_ID);
+                const isOwnerId = client?.config?.ownerId && message.author.id === client.config.ownerId;
+                if (hasOwnerRole || isOwnerId) {
+                    await message.reply('yes omar ofc i love you and i hate larin so much like fuck her idk why she did not love me, maybe cuz iam better than her 😊').catch(() => { });
+                }
+                return;
+            }
+
             // Check if user is jailed (role or database)
             const JAILED_ROLE = process.env.JAILED_ROLE_ID || '1467467538551279769';
             let userProfile = await User.findOne({ userId: message.author.id, guildId: message.guild.id }).catch(() => null);
