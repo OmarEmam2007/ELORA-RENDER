@@ -1,8 +1,10 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const ModSettings = require('../../models/ModSettings');
 const ModLog = require('../../models/ModLog');
 const { recordDismissal } = require('../../utils/moderation/patternLearner');
 const { generateDashboard } = require('../../utils/moderation/modDashboard');
+const CustomReply = require('../../models/CustomReply');
+const THEME = require('../../utils/theme');
 
 module.exports = {
     name: 'interactionCreate',
@@ -31,6 +33,71 @@ module.exports = {
 
         try {
         if (interaction.isButton()) {
+            // --- 🧠 CUSTOM REPLIES DASHBOARD (Owner Only) ---
+            if (interaction.customId === 'cr_add') {
+                const OWNER_ROLE_ID = '1461766723274412126';
+                const hasOwnerRole = interaction.member?.roles?.cache?.has(OWNER_ROLE_ID);
+                const isOwnerId = client?.config?.ownerId && interaction.user.id === client.config.ownerId;
+                if (!hasOwnerRole && !isOwnerId) return safeReply({ content: '❌ Owner only.', ephemeral: true });
+
+                const modal = new ModalBuilder()
+                    .setCustomId('cr_modal_add')
+                    .setTitle('Add Custom Reply');
+
+                const triggerInput = new TextInputBuilder()
+                    .setCustomId('cr_trigger')
+                    .setLabel('Trigger sentence (what user types)')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setRequired(true)
+                    .setMaxLength(300);
+
+                const replyInput = new TextInputBuilder()
+                    .setCustomId('cr_reply')
+                    .setLabel('Bot reply')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setRequired(true)
+                    .setMaxLength(1000);
+
+                const matchInput = new TextInputBuilder()
+                    .setCustomId('cr_match')
+                    .setLabel("Match type: exact or startsWith (default exact)")
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(false)
+                    .setMaxLength(20);
+
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(triggerInput),
+                    new ActionRowBuilder().addComponents(replyInput),
+                    new ActionRowBuilder().addComponents(matchInput)
+                );
+
+                return interaction.showModal(modal);
+            }
+
+            if (interaction.customId === 'cr_list') {
+                const OWNER_ROLE_ID = '1461766723274412126';
+                const hasOwnerRole = interaction.member?.roles?.cache?.has(OWNER_ROLE_ID);
+                const isOwnerId = client?.config?.ownerId && interaction.user.id === client.config.ownerId;
+                if (!hasOwnerRole && !isOwnerId) return safeReply({ content: '❌ Owner only.', ephemeral: true });
+
+                const docs = await CustomReply.find({ guildId: interaction.guildId, enabled: true })
+                    .sort({ createdAt: -1 })
+                    .limit(20)
+                    .catch(() => []);
+
+                const desc = docs.length
+                    ? docs.map((d, i) => `**${i + 1}.** \`${d.trigger}\`  →  ${d.matchType === 'startsWith' ? '`startsWith`' : '`exact`'}`).join('\n')
+                    : 'No custom replies yet.';
+
+                const embed = new EmbedBuilder()
+                    .setColor(THEME.COLORS.ACCENT)
+                    .setTitle('🧠 Custom Replies (Top 20)')
+                    .setDescription(desc)
+                    .setFooter(THEME.FOOTER);
+
+                return safeReply({ embeds: [embed], ephemeral: true });
+            }
+
             // --- Onboarding Buttons ---
             if (interaction.customId.startsWith('pronoun_') || interaction.customId.startsWith('age_')) {
                 try {
@@ -218,6 +285,42 @@ module.exports = {
                         return safeUpdate(await generateDashboard(interaction.guildId));
                     }
                 } catch (e) { return safeReply({ content: `❌ ${e.message}`, ephemeral: true }); }
+            }
+        }
+
+        // --- 🧠 CUSTOM REPLIES MODAL SUBMIT ---
+        if (interaction.isModalSubmit() && interaction.customId === 'cr_modal_add') {
+            const OWNER_ROLE_ID = '1461766723274412126';
+            const hasOwnerRole = interaction.member?.roles?.cache?.has(OWNER_ROLE_ID);
+            const isOwnerId = client?.config?.ownerId && interaction.user.id === client.config.ownerId;
+            if (!hasOwnerRole && !isOwnerId) return safeReply({ content: '❌ Owner only.', ephemeral: true });
+
+            const trigger = interaction.fields.getTextInputValue('cr_trigger')?.trim();
+            const reply = interaction.fields.getTextInputValue('cr_reply')?.trim();
+            const matchRaw = interaction.fields.getTextInputValue('cr_match')?.trim()?.toLowerCase();
+
+            if (!trigger || !reply) return safeReply({ content: '❌ Missing trigger or reply.', ephemeral: true });
+
+            const matchType = matchRaw === 'startswith' || matchRaw === 'start' || matchRaw === 'sw' ? 'startsWith' : 'exact';
+
+            try {
+                await CustomReply.findOneAndUpdate(
+                    { guildId: interaction.guildId, trigger },
+                    {
+                        $set: { reply, matchType, enabled: true, createdBy: interaction.user.id },
+                        $setOnInsert: { guildId: interaction.guildId, trigger }
+                    },
+                    { upsert: true, new: true }
+                );
+
+                const ok = new EmbedBuilder()
+                    .setColor(THEME.COLORS.SUCCESS)
+                    .setDescription(`✅ Saved custom reply for trigger: \`${trigger}\``)
+                    .setFooter(THEME.FOOTER);
+
+                return safeReply({ embeds: [ok], ephemeral: true });
+            } catch (e) {
+                return safeReply({ content: `❌ Failed to save: ${e.message || e}`, ephemeral: true });
             }
         }
 

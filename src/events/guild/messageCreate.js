@@ -7,6 +7,7 @@ const Bump = require('../../models/Bump');
 const { analyzeMessage } = require('../../utils/moderation/coreDetector');
 const { createLogEmbed } = require('../../utils/moderation/modernLogger');
 const { logDetection } = require('../../utils/moderation/patternLearner');
+const CustomReply = require('../../models/CustomReply');
 const THEME = require('../../utils/theme');
 const heistCommand = require('../../commands/economy/heist');
 
@@ -280,6 +281,48 @@ module.exports = {
                     await message.reply('YES PLZ SHE IS SO ANNOYING').catch(() => { });
                 }
                 return;
+            }
+
+            // --- 🧠 CUSTOM REPLIES (DB-Driven) ---
+            // Prevent spam/loops: 1 reply per 3s per user.
+            if (!client.customReplyCooldown) client.customReplyCooldown = new Map();
+            const last = client.customReplyCooldown.get(message.author.id) || 0;
+            if (Date.now() - last > 3000) {
+                try {
+                    const contentLower = messageContent.toLowerCase();
+
+                    // Fetch a small set to keep it fast.
+                    const replies = await CustomReply.find({ guildId: message.guild.id, enabled: true })
+                        .sort({ updatedAt: -1 })
+                        .limit(200)
+                        .catch(() => []);
+
+                    let matched = null;
+                    for (const r of replies) {
+                        const trig = (r.trigger || '').trim().toLowerCase();
+                        if (!trig) continue;
+
+                        if (r.matchType === 'startsWith') {
+                            if (contentLower.startsWith(trig)) {
+                                matched = r;
+                                break;
+                            }
+                        } else {
+                            if (contentLower === trig) {
+                                matched = r;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (matched) {
+                        client.customReplyCooldown.set(message.author.id, Date.now());
+                        await message.reply(matched.reply).catch(() => { });
+                        return;
+                    }
+                } catch (e) {
+                    // Best-effort only
+                }
             }
 
             // Check if user is jailed (role or database)
