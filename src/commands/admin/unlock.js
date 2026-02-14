@@ -19,11 +19,42 @@ module.exports = {
         const applyUnlock = async (channel) => {
             if (!channel || !channel.permissionOverwrites) return false;
             if (![ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(channel.type)) return false;
+            const reason = `Unlocked by ${message.author.tag}`;
+
+            // 1) Reset @everyone overwrites
             await channel.permissionOverwrites.edit(
                 message.guild.roles.everyone,
-                { SendMessages: null },
-                { reason: `Unlocked by ${message.author.tag}` }
+                {
+                    SendMessages: null,
+                    SendMessagesInThreads: null,
+                    AddReactions: null
+                },
+                { reason }
             );
+
+            // 2) Remove explicit DENIES we applied on other roles during lock.
+            // We do NOT restore old "allow" states (since we didn't snapshot), we just clear the denies.
+            let cleared = 0;
+            for (const overwrite of channel.permissionOverwrites.cache.values()) {
+                if (overwrite.type !== 0) continue; // only roles
+                if (overwrite.id === message.guild.roles.everyone.id) continue;
+
+                const deny = overwrite.deny;
+                if (deny?.has(PermissionFlagsBits.SendMessages) || deny?.has(PermissionFlagsBits.SendMessagesInThreads) || deny?.has(PermissionFlagsBits.AddReactions)) {
+                    await channel.permissionOverwrites.edit(
+                        overwrite.id,
+                        {
+                            SendMessages: null,
+                            SendMessagesInThreads: null,
+                            AddReactions: null
+                        },
+                        { reason }
+                    ).catch(() => { });
+                    cleared++;
+                }
+            }
+
+            channel.__eloraUnlockCleared = cleared;
             return true;
         };
 
@@ -31,7 +62,8 @@ module.exports = {
             if (!unlockAll) {
                 const ok = await applyUnlock(message.channel);
                 if (!ok) return message.reply('❌ This channel type is not supported for unlock.');
-                return message.reply('🔓 Channel unlocked.');
+                const cleared = message.channel.__eloraUnlockCleared || 0;
+                return message.reply(`🔓 Channel unlocked.${cleared ? ` (Cleared ${cleared} role overwrite(s))` : ''}`);
             }
 
             let okCount = 0;
