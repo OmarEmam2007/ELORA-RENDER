@@ -19,11 +19,41 @@ module.exports = {
         const applyLock = async (channel) => {
             if (!channel || !channel.permissionOverwrites) return false;
             if (![ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(channel.type)) return false;
+            const reason = `Locked by ${message.author.tag}`;
+
+            // 1) Lock @everyone
             await channel.permissionOverwrites.edit(
                 message.guild.roles.everyone,
-                { SendMessages: false },
-                { reason: `Locked by ${message.author.tag}` }
+                {
+                    SendMessages: false,
+                    SendMessagesInThreads: false,
+                    AddReactions: false
+                },
+                { reason }
             );
+
+            // 2) If any role overwrite explicitly ALLOWS sending, deny it too.
+            // This prevents cases where a "Members" role has SendMessages: true.
+            let tightened = 0;
+            for (const overwrite of channel.permissionOverwrites.cache.values()) {
+                if (overwrite.type !== 0) continue; // only roles
+                if (overwrite.id === message.guild.roles.everyone.id) continue;
+
+                const allow = overwrite.allow;
+                if (allow?.has(PermissionFlagsBits.SendMessages) || allow?.has(PermissionFlagsBits.SendMessagesInThreads)) {
+                    await channel.permissionOverwrites.edit(
+                        overwrite.id,
+                        {
+                            SendMessages: false,
+                            SendMessagesInThreads: false
+                        },
+                        { reason }
+                    ).catch(() => { });
+                    tightened++;
+                }
+            }
+
+            channel.__eloraLockTightened = tightened;
             return true;
         };
 
@@ -31,7 +61,8 @@ module.exports = {
             if (!lockAll) {
                 const ok = await applyLock(message.channel);
                 if (!ok) return message.reply('❌ This channel type is not supported for lock.');
-                return message.reply('🔒 Channel locked.');
+                const tightened = message.channel.__eloraLockTightened || 0;
+                return message.reply(`🔒 Channel locked.${tightened ? ` (Tightened ${tightened} role overwrite(s))` : ''}`);
             }
 
             let okCount = 0;
