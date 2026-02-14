@@ -19,7 +19,11 @@ module.exports = {
         const applyUnlock = async (channel) => {
             if (!channel || !channel.permissionOverwrites) return false;
             if (![ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(channel.type)) return false;
-            await channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: null });
+            await channel.permissionOverwrites.edit(
+                message.guild.roles.everyone,
+                { SendMessages: null },
+                { reason: `Unlocked by ${message.author.tag}` }
+            );
             return true;
         };
 
