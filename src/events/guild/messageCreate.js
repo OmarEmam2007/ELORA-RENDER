@@ -272,12 +272,12 @@ module.exports = {
             // --- 💬 ELORA PHRASE RESPONDER ---
             // Handles: "elora do you love me" / "elora do u love me"
             const lowered = messageContent.toLowerCase();
-            if (lowered === 'elora do you love me' || lowered === 'elora do u love me') {
+            if (lowered === 'elora do you want larin to shut up' || lowered === 'elora do u want larin to shut up') {
                 const OWNER_ROLE_ID = '1461766723274412126';
                 const hasOwnerRole = message.member?.roles?.cache?.has(OWNER_ROLE_ID);
                 const isOwnerId = client?.config?.ownerId && message.author.id === client.config.ownerId;
                 if (hasOwnerRole || isOwnerId) {
-                    await message.reply('yes omar ofc i love you and i hate larin so much like fuck her idk why she did not love me, maybe cuz iam better than her 😊').catch(() => { });
+                    await message.reply('YES PLZ SHE IS SO ANNOYING').catch(() => { });
                 }
                 return;
             }
