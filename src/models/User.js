@@ -5,6 +5,10 @@ const userSchema = new mongoose.Schema({
     guildId: { type: String, required: true },
     xp: { type: Number, default: 0 },
     level: { type: Number, default: 1 },
+    voiceXp: { type: Number, default: 0 },
+    voiceLevel: { type: Number, default: 1 },
+    voiceTotalMs: { type: Number, default: 0 },
+    voiceSessionStart: { type: Number, default: 0 },
     balance: { type: Number, default: 0 }, // Legacy field, keeping for compatibility
     wallet: { type: Number, default: 0 }, // Cash on hand
     bank: { type: Number, default: 0 }, // Stored money
