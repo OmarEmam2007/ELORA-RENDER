@@ -1,7 +1,7 @@
 module.exports = {
     name: 'clientReady',
     once: true,
-    execute(client) {
+    async execute(client) {
         console.log(`🤖 Logged in as ${client.user.tag}`);
 
         if (!client.config.ownerId) {
@@ -35,5 +35,30 @@ module.exports = {
 
         // Rotate every 30 seconds
         setInterval(updateStatus, 30 * 1000);
+
+        // --- 🎫 Invite Cache Bootstrap ---
+        // Used by guildMemberAdd to determine which invite was used.
+        // Requires the bot to have Manage Server permission to fetch invites.
+        try {
+            if (!client.inviteCache) client.inviteCache = new Map();
+
+            for (const [guildId, guild] of client.guilds.cache) {
+                try {
+                    const invites = await guild.invites.fetch();
+                    const inviteMap = new Map();
+                    for (const invite of invites.values()) {
+                        inviteMap.set(invite.code, invite.uses || 0);
+                    }
+                    client.inviteCache.set(guildId, inviteMap);
+                } catch (e) {
+                    // Missing permissions or invites disabled.
+                    client.inviteCache.set(guildId, new Map());
+                }
+            }
+
+            console.log('🎫 Invite cache initialized.');
+        } catch (e) {
+            console.error('❌ Invite cache init error:', e);
+        }
     },
 };

@@ -1,9 +1,57 @@
 const { EmbedBuilder } = require('discord.js');
+const InviteStats = require('../../models/InviteStats');
 
 module.exports = {
     name: 'guildMemberRemove',
     async execute(member, client) {
         try {
+            // --- 🎫 Invite Leave Tracking ---
+            // Best-effort: never block goodbye message.
+            try {
+                const guildId = member.guild.id;
+                const leaverId = member.id;
+
+                const inviterStats = await InviteStats.findOne({ guildId, 'invitedUsers.userId': leaverId });
+                if (inviterStats) {
+                    const record = inviterStats.invitedUsers.find(u => u.userId === leaverId);
+                    if (record && !record.left) {
+                        record.left = true;
+                        inviterStats.leaves = (inviterStats.leaves || 0) + 1;
+
+                        if (!record.isFake) {
+                            inviterStats.regularInvites = Math.max(0, (inviterStats.regularInvites || 0) - 1);
+                            inviterStats.inviteCount = Math.max(0, (inviterStats.inviteCount || 0) - 1);
+                        }
+
+                        await inviterStats.save().catch(() => { });
+
+                        // Update inviter roles after subtraction (cumulative, optional cleanup not done here)
+                        const roleTiers = [
+                            { invites: 5, roleId: '1472157647804432528' },
+                            { invites: 10, roleId: '1472158092035751988' },
+                            { invites: 25, roleId: '1472158530256502848' },
+                            { invites: 50, roleId: '1472163006740959395' },
+                            { invites: 100, roleId: '1472160112205365278' }
+                        ];
+
+                        const inviterMember = await member.guild.members.fetch(inviterStats.userId).catch(() => null);
+                        if (inviterMember) {
+                            const total = inviterStats.inviteCount || 0;
+                            const rolesShouldHave = new Set(roleTiers.filter(t => total >= t.invites).map(t => t.roleId));
+
+                            // Keep profile clean: remove tiers no longer eligible.
+                            for (const tier of roleTiers) {
+                                if (inviterMember.roles.cache.has(tier.roleId) && !rolesShouldHave.has(tier.roleId)) {
+                                    await inviterMember.roles.remove(tier.roleId, 'Invite rewards: tier lost due to leave').catch(() => { });
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('Invite leave tracking error:', e);
+            }
+
             const goodbyeChannelId = client.config.goodbyeChannelId;
             if (!goodbyeChannelId) return; // No goodbye channel configured
 
