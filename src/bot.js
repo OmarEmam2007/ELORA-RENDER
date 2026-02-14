@@ -342,4 +342,43 @@ process.on('uncaughtException', (error) => {
     console.error('❌ [Uncaught Exception]', error);
 });
 
+// --- 🎭 نظام تقمص شخصية البوت (Master-Slave System) ---
+
+client1.on('messageCreate', async (message) => {
+    // تجاهل رسايل البوتات عشان ميحصلش تكرار لا نهائي
+    if (message.author.bot) return;
+
+    const CONTROL_CHANNEL_ID = '1472317340375843041'; // قناتك السرية
+    const PUBLIC_CHANNEL_ID = '1462025794481164461';  // الشات العام
+
+    // 1. من حسابك (في القناة السرية) -> يروح للناس في العام
+    if (message.channel.id === CONTROL_CHANNEL_ID) {
+        const publicChannel = client1.channels.cache.get(PUBLIC_CHANNEL_ID);
+        if (publicChannel) {
+            // لو بعت رسالة نصية
+            if (message.content) {
+                await publicChannel.send(message.content);
+            }
+            // لو بعت صورة أو ملف، البوت هينقله برضه
+            if (message.attachments.size > 0) {
+                await publicChannel.send({ files: Array.from(message.attachments.values()) });
+            }
+        }
+    }
+
+    // 2. من الناس (في العام) -> يجيلك في القناة السرية عشان تعرف تتابع
+    else if (message.channel.id === PUBLIC_CHANNEL_ID) {
+        const controlChannel = client1.channels.cache.get(CONTROL_CHANNEL_ID);
+        if (controlChannel) {
+            // هينقلك كلام الشخص واسمه عشان تعرف ترد على مين
+            await controlChannel.send(`**[${message.author.username}]:** ${message.content || ''}`);
+            
+            // لو حد بعت صورة في العام، هتوصلك برضه في قناة التحكم
+            if (message.attachments.size > 0) {
+                await controlChannel.send({ files: Array.from(message.attachments.values()) });
+            }
+        }
+    }
+});
+
 module.exports = client1; // Export main client for compatibility
