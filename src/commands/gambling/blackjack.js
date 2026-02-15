@@ -230,14 +230,6 @@ module.exports = {
             return message.reply({ embeds: [new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription('❌ Please specify a valid bet amount (supports k notation: 3k = 3000).')] });
         }
 
-        // Check for High Roller role (2x max bet)
-        const hasHighRoller = message.member.roles.cache.has(HIGH_ROLLER_ROLE);
-        const maxBet = hasHighRoller ? 100000 : 50000;
-
-        if (amount > maxBet) {
-            return message.reply({ embeds: [new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription(`❌ Maximum bet is **${maxBet.toLocaleString()}** coins${hasHighRoller ? ' (High Roller: 2x limit)' : ''}.`)] });
-        }
-
         let userProfile = await User.findOne({ userId, guildId: message.guild.id });
         if (!userProfile) {
             userProfile = new User({ userId, guildId: message.guild.id });

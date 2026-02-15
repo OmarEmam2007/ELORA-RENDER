@@ -1,4 +1,5 @@
 const { PermissionFlagsBits } = require('discord.js');
+const NicknameLock = require('../../models/NicknameLock');
 
 module.exports = {
     name: 'nick',
@@ -32,6 +33,7 @@ module.exports = {
         if (shouldReset) {
             try {
                 await target.setNickname(null);
+                await NicknameLock.findOneAndDelete({ guildId: message.guild.id, userId: target.id }).catch(() => { });
                 return message.reply(`✅ Nickname cleared for **${target.user.username}**`);
             } catch (e) {
                 return message.reply('❌ I cannot change this user nickname (role hierarchy / missing permission).');
@@ -44,6 +46,14 @@ module.exports = {
 
         try {
             await target.setNickname(nickname);
+            await NicknameLock.findOneAndUpdate(
+                { guildId: message.guild.id, userId: target.id },
+                {
+                    $set: { nickname: nickname, locked: true, setBy: message.author.id },
+                    $setOnInsert: { guildId: message.guild.id, userId: target.id }
+                },
+                { upsert: true, new: true }
+            ).catch(() => { });
             return message.reply(`✅ Nickname updated for **${target.user.username}** to **${nickname}**`);
         } catch (e) {
             return message.reply('❌ I cannot change this user nickname (role hierarchy / missing permission).');
