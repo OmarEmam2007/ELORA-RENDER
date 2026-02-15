@@ -16,6 +16,15 @@ function parseAmount(input) {
     if (lower === 'all' || lower === 'max') {
         return 'all';
     }
+
+    // Check for "m" notation (e.g., "3m", "10m", "1.5m")
+    const mMatch = lower.match(/^([\d.]+)m$/);
+    if (mMatch) {
+        const num = parseFloat(mMatch[1]);
+        if (!isNaN(num) && num > 0) {
+            return Math.floor(num * 1000000);
+        }
+    }
     
     // Check for "k" notation (e.g., "3k", "10k", "1.5k")
     const kMatch = lower.match(/^([\d.]+)k$/);
