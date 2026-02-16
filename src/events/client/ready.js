@@ -60,5 +60,54 @@ module.exports = {
         } catch (e) {
             console.error('❌ Invite cache init error:', e);
         }
+
+        // --- 🎫 Invite Reward Roles Sync (highest-tier-only) ---
+        // Fixes existing members who already had multiple tiers from older logic.
+        try {
+            const InviteStats = require('../../models/InviteStats');
+
+            const roleTiers = [
+                { invites: 5, roleId: '1472157647804432528' },
+                { invites: 10, roleId: '1472158092035751988' },
+                { invites: 25, roleId: '1472158530256502848' },
+                { invites: 50, roleId: '1472163006740959395' },
+                { invites: 100, roleId: '1472160112205365278' }
+            ];
+
+            for (const [guildId, guild] of client.guilds.cache) {
+                let stats;
+                try {
+                    stats = await InviteStats.find({ guildId }).lean();
+                } catch {
+                    continue;
+                }
+
+                if (!stats?.length) continue;
+
+                for (const s of stats) {
+                    const inviterMember = await guild.members.fetch(s.userId).catch(() => null);
+                    if (!inviterMember) continue;
+
+                    const total = s.inviteCount || 0;
+                    const eligibleTiers = roleTiers.filter(t => total >= t.invites);
+                    const highestTier = eligibleTiers.length ? eligibleTiers[eligibleTiers.length - 1] : null;
+
+                    const tierRoleIds = roleTiers.map(t => t.roleId);
+                    const rolesToRemove = tierRoleIds.filter(roleId => roleId !== highestTier?.roleId);
+
+                    if (highestTier && !inviterMember.roles.cache.has(highestTier.roleId)) {
+                        await inviterMember.roles.add(highestTier.roleId, 'Invite rewards sync: set highest tier').catch(() => { });
+                    }
+
+                    for (const roleId of rolesToRemove) {
+                        if (inviterMember.roles.cache.has(roleId)) {
+                            await inviterMember.roles.remove(roleId, 'Invite rewards sync: remove non-highest tiers').catch(() => { });
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('❌ Invite reward roles sync error:', e);
+        }
     },
 };
