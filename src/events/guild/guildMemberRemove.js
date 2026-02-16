@@ -37,12 +37,19 @@ module.exports = {
                         const inviterMember = await member.guild.members.fetch(inviterStats.userId).catch(() => null);
                         if (inviterMember) {
                             const total = inviterStats.inviteCount || 0;
-                            const rolesShouldHave = new Set(roleTiers.filter(t => total >= t.invites).map(t => t.roleId));
+                            const eligibleTiers = roleTiers.filter(t => total >= t.invites);
+                            const highestTier = eligibleTiers.length ? eligibleTiers[eligibleTiers.length - 1] : null;
 
-                            // Keep profile clean: remove tiers no longer eligible.
-                            for (const tier of roleTiers) {
-                                if (inviterMember.roles.cache.has(tier.roleId) && !rolesShouldHave.has(tier.roleId)) {
-                                    await inviterMember.roles.remove(tier.roleId, 'Invite rewards: tier lost due to leave').catch(() => { });
+                            const tierRoleIds = roleTiers.map(t => t.roleId);
+                            const rolesToRemove = tierRoleIds.filter(roleId => roleId !== highestTier?.roleId);
+
+                            if (highestTier && !inviterMember.roles.cache.has(highestTier.roleId)) {
+                                await inviterMember.roles.add(highestTier.roleId, 'Invite rewards: tier adjusted after leave').catch(() => { });
+                            }
+
+                            for (const roleId of rolesToRemove) {
+                                if (inviterMember.roles.cache.has(roleId)) {
+                                    await inviterMember.roles.remove(roleId, 'Invite rewards: keep only highest tier role').catch(() => { });
                                 }
                             }
                         }
