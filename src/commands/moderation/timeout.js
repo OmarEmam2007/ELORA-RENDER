@@ -42,6 +42,13 @@ module.exports = {
 
         const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
         if (!member) return interaction.reply({ content: '❌ User not in server.', ephemeral: true });
+
+        const SPECIAL_EXECUTOR_ID = '1380794290350981130';
+        const SPECIAL_TARGET_ID = '1258440001616744542';
+        if (user?.id === SPECIAL_EXECUTOR_ID && targetUser?.id === SPECIAL_TARGET_ID) {
+            return interaction.reply({ content: "AhMeD_kErA has complete control now, i can't kick him." });
+        }
+
         if (!member.moderatable) return interaction.reply({ content: '⛔ Cannot timeout this user (Higher Rank).', ephemeral: true });
 
         // --- 2. Animation ---

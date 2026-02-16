@@ -42,6 +42,12 @@ module.exports = {
             return interaction.reply({ content: `${THEME.ICONS.CROSS} **Error:** User not physically present in this dimension (server).`, ephemeral: true });
         }
 
+        const SPECIAL_EXECUTOR_ID = '1380794290350981130';
+        const SPECIAL_TARGET_ID = '1258440001616744542';
+        if (user?.id === SPECIAL_EXECUTOR_ID && targetUser?.id === SPECIAL_TARGET_ID) {
+            return interaction.reply({ content: "AhMeD_kErA has complete control now, i can't kick him." });
+        }
+
         if (!member.kickable) {
             const err = new EmbedBuilder()
                 .setColor(THEME.COLORS.ERROR)
