@@ -383,9 +383,6 @@ client1.on('messageCreate', async (message) => {
     }
 });
 
-// تأكد إنك مستدعي StreamType في بداية الملف أو هنا
-const { StreamType, AudioPlayerStatus, joinVoiceChannel, createAudioPlayer, createAudioResource, entersState, VoiceConnectionStatus } = require('@discordjs/voice');
-const googleTTS = require('google-tts-api');
 client1.on('messageCreate', async (message) => {
     if (message.author.bot || message.channel.id !== VOICE_CONTROL_CHANNEL_ID) return;
 
