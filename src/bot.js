@@ -36,6 +36,8 @@ app.listen(7860, () => console.log('✅ Server is running on port 7860'));
 // ------------------------------------------
 // --------------------------------
 const { Client, GatewayIntentBits, Collection, Partials, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { StreamType, AudioPlayerStatus, joinVoiceChannel, createAudioPlayer, createAudioResource, entersState, VoiceConnectionStatus } = require('@discordjs/voice');
+const googleTTS = require('google-tts-api');
 const mongoose = require('mongoose');
 const { loadEvents } = require('./handlers/eventHandler');
 const { loadCommands } = require('./handlers/commandHandler');
@@ -381,55 +383,89 @@ client1.on('messageCreate', async (message) => {
     }
 });
 
-// --- 🎙️ نظام التحدث الصوتي (Elora TTS Master-Slave) ---
+// تأكد إنك مستدعي StreamType في بداية الملف أو هنا
+const { StreamType, AudioPlayerStatus, joinVoiceChannel, createAudioPlayer, createAudioResource, entersState, VoiceConnectionStatus } = require('@discordjs/voice');
 const googleTTS = require('google-tts-api');
-const { createAudioResource, createAudioPlayer, joinVoiceChannel, AudioPlayerStatus, NoSubscriberBehavior } = require('@discordjs/voice');
-
-const VOICE_CONTROL_CHANNEL_ID = '1472935170138046558'; 
-const TARGET_VOICE_CHANNEL_ID = '1461761956158636033'; 
-const GUILD_ID = '1461451253606383810';                
-
 client1.on('messageCreate', async (message) => {
-    // التأكد إنك أنت اللي بتكتب وفي القناة الصح
     if (message.author.bot || message.channel.id !== VOICE_CONTROL_CHANNEL_ID) return;
 
     try {
-        // 1. توليد رابط الصوت من النص (يدعم العربية)
         const url = googleTTS.getAudioUrl(message.content, {
             lang: 'ar',
             slow: false,
             host: 'https://translate.google.com',
         });
 
-        // 2. الدخول للقناة الصوتية
         const connection = joinVoiceChannel({
             channelId: TARGET_VOICE_CHANNEL_ID,
             guildId: GUILD_ID,
             adapterCreator: message.guild.voiceAdapterCreator,
         });
 
-        // 3. إعداد المشغل (Player)
-        const player = createAudioPlayer({
-            behaviors: {
-                noSubscriber: NoSubscriberBehavior.Play,
-            },
+        const player = createAudioPlayer();
+        
+        // التعديل الجوهري هنا: تحديد الـ inputType وتجربة تشغيل الرابط
+        const resource = createAudioResource(url, {
+            inputType: StreamType.Arbitrary,
         });
-
-        const resource = createAudioResource(url);
 
         player.play(resource);
         connection.subscribe(player);
 
-        // 4. مسح رسالتك عشان محدش يشوف إنك "الملقن"
-        if (message.deletable) {
-            await message.delete().catch(() => {});
-        }
+        // --- كاشف أخطاء الصوت (هيقولنا ليه مفيش صوت) ---
+        player.on('error', error => {
+            console.error('❌ خطأ في مشغل الصوت:', error.message);
+        });
 
-        // إشعار بسيط ليك في الكونسول (اختياري)
-        console.log(`🔊 Elora is speaking: ${message.content}`);
+        player.on(AudioPlayerStatus.Playing, () => {
+            console.log('✅ البوت بدأ ينطق الكلام فعلياً!');
+        });
+
+        player.on(AudioPlayerStatus.Idle, () => {
+            console.log('🔇 البوت خلص كلام.');
+        });
+        // ------------------------------------------
+
+        if (message.deletable) await message.delete().catch(() => {});
 
     } catch (error) {
-        console.error('❌ TTS System Error:', error);
+        console.error('❌ خطأ في النظام:', error);
+    }
+});
+
+// ... (أي كود قديم عندك)
+
+// 1. حط التعريفات دي الأول عشان الكود يفهم إنت بتكلم عن أنهي رومات
+// --- 🆔 تعريف الثوابت (مرة واحدة فقط) ---
+const VOICE_CONTROL_CHANNEL_ID = '1472935170138046558'; 
+const TARGET_VOICE_CHANNEL_ID = '1461761956158636033'; 
+const GUILD_ID = '1461451253606383810';
+const CONTROL_CHANNEL_ID = '1472317340375843041';
+const PUBLIC_CHANNEL_ID = '1462025794481164461';
+
+// 2. حط الكود اللي إنت لسه باعتوا لي حالا هنا
+client1.on('messageCreate', async (message) => {
+    if (message.author.bot || message.channel.id !== VOICE_CONTROL_CHANNEL_ID) return;
+    try {
+        const url = googleTTS.getAudioUrl(message.content, { lang: 'ar', slow: false, host: 'https://translate.google.com' });
+        const connection = joinVoiceChannel({
+            channelId: TARGET_VOICE_CHANNEL_ID,
+            guildId: GUILD_ID,
+            adapterCreator: message.guild.voiceAdapterCreator,
+        });
+
+        await entersState(connection, VoiceConnectionStatus.Ready, 5_000);
+
+        const player = createAudioPlayer();
+        const resource = createAudioResource(url, { inputType: StreamType.Arbitrary });
+
+        player.play(resource);
+        connection.subscribe(player);
+
+        if (message.deletable) await message.delete().catch(() => {});
+        console.log(`✅ Elora said: ${message.content}`);
+    } catch (error) {
+        console.error('❌ Audio Error:', error);
     }
 });
 
