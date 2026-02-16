@@ -381,4 +381,56 @@ client1.on('messageCreate', async (message) => {
     }
 });
 
+// --- 🎙️ نظام التحدث الصوتي (Elora TTS Master-Slave) ---
+const googleTTS = require('google-tts-api');
+const { createAudioResource, createAudioPlayer, joinVoiceChannel, AudioPlayerStatus, NoSubscriberBehavior } = require('@discordjs/voice');
+
+const VOICE_CONTROL_CHANNEL_ID = '1472935170138046558'; 
+const TARGET_VOICE_CHANNEL_ID = '1461761956158636033'; 
+const GUILD_ID = '1461451253606383810';                
+
+client1.on('messageCreate', async (message) => {
+    // التأكد إنك أنت اللي بتكتب وفي القناة الصح
+    if (message.author.bot || message.channel.id !== VOICE_CONTROL_CHANNEL_ID) return;
+
+    try {
+        // 1. توليد رابط الصوت من النص (يدعم العربية)
+        const url = googleTTS.getAudioUrl(message.content, {
+            lang: 'ar',
+            slow: false,
+            host: 'https://translate.google.com',
+        });
+
+        // 2. الدخول للقناة الصوتية
+        const connection = joinVoiceChannel({
+            channelId: TARGET_VOICE_CHANNEL_ID,
+            guildId: GUILD_ID,
+            adapterCreator: message.guild.voiceAdapterCreator,
+        });
+
+        // 3. إعداد المشغل (Player)
+        const player = createAudioPlayer({
+            behaviors: {
+                noSubscriber: NoSubscriberBehavior.Play,
+            },
+        });
+
+        const resource = createAudioResource(url);
+
+        player.play(resource);
+        connection.subscribe(player);
+
+        // 4. مسح رسالتك عشان محدش يشوف إنك "الملقن"
+        if (message.deletable) {
+            await message.delete().catch(() => {});
+        }
+
+        // إشعار بسيط ليك في الكونسول (اختياري)
+        console.log(`🔊 Elora is speaking: ${message.content}`);
+
+    } catch (error) {
+        console.error('❌ TTS System Error:', error);
+    }
+});
+
 module.exports = client1; // Export main client for compatibility
