@@ -1,4 +1,5 @@
 const { EmbedBuilder, AuditLogEvent } = require('discord.js');
+const THEME = require('../../utils/theme');
 
 module.exports = {
     name: 'messageDelete',
@@ -18,7 +19,7 @@ module.exports = {
                 { name: 'Channel', value: `${message.channel}`, inline: true },
                 { name: 'Content', value: message.content || '[No Content/Image]' }
             )
-            .setColor(client.config.colors.error)
+            .setColor(THEME.COLORS.GRAVITY)
             .setTimestamp();
 
         logChannel.send({ embeds: [embed] });

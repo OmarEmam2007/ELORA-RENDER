@@ -2,13 +2,13 @@
 module.exports = {
     // 🎨 Color Palette
     COLORS: {
-        PRIMARY: '#E3E4E6',   // Soft Silver (Moonlight)
-        SECONDARY: '#2B2D31', // Deep Space (Background)
-        ACCENT: '#00F3FF',    // Cyan/Electric Blue (Tech/Energy)
-        ERROR: '#FF3E3E',     // Red Eclipse (Critical)
-        SUCCESS: '#00FF9D',   // Green Orbit (Success)
-        WARNING: '#FFD700',   // Solar Flare (Warning)
-        GRAVITY: '#111214'    // Darker than Space (Footers/Borders)
+        PRIMARY: '#0F1115',   // Modern Dark Base (Readable)
+        SECONDARY: '#141821', // Dark Surface
+        ACCENT: '#6AE4FF',    // Icy Cyan
+        ERROR: '#FF4D6D',     // Modern Red
+        SUCCESS: '#2DFFB3',   // Neon Mint
+        WARNING: '#FFD36A',   // Warm Amber
+        GRAVITY: '#090A0D'    // Ultra Dark (Footers/Borders)
     },
 
     // 🖼️ Icons & Assets
@@ -48,5 +48,13 @@ module.exports = {
     FOOTER: {
         text: 'Sovereign Nexus • Lunar Operations',
         iconURL: 'https://cdn-icons-png.flaticon.com/512/11529/11529141.png'
+    },
+
+    makeEmbed(EmbedBuilder, variant = 'PRIMARY') {
+        const color = this.COLORS[variant] || this.COLORS.PRIMARY;
+        return new EmbedBuilder()
+            .setColor(color)
+            .setFooter({ text: this.FOOTER.text, iconURL: this.FOOTER.iconURL })
+            .setTimestamp();
     }
 };
