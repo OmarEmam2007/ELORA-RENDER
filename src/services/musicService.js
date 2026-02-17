@@ -13,6 +13,8 @@ const {
 } = require('@discordjs/voice');
 const play = require('play-dl');
 
+let playDlInitPromise = null;
+
 async function initializePlayDL() {
     try {
         const rawCookies = process.env.YT_COOKIES;
@@ -50,7 +52,10 @@ class MusicService {
         this.guildStates = new Map();
 
         // Best-effort init; don't block bot startup.
-        initializePlayDL().catch(() => { });
+        if (!playDlInitPromise) {
+            playDlInitPromise = initializePlayDL();
+        }
+        playDlInitPromise.catch(() => { });
     }
 
     _getState(guildId) {
@@ -208,6 +213,7 @@ class MusicService {
         state.textChannelId = textChannelId;
         await this._ensureConnection(guildId, voiceChannelId);
         const res = await this._resolveQuery(query);
+        console.log(`[MUSIC] resolveQuery input="${String(query).slice(0, 200)}" -> url="${res?.url}" title="${res?.title}"`);
         if (!res?.url || typeof res.url !== 'string' || res.url === 'undefined') {
             throw new Error('Could not resolve a playable URL for this track.');
         }
