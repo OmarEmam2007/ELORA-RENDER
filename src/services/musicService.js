@@ -21,33 +21,36 @@ async function initializePlayDL() {
             try {
                 // تحويل النص اللي جاي من Railway لـ JSON Array
                 const cookiesArray = JSON.parse(rawCookies);
-                await play.setToken({ 
-                    youtube: { 
-                        cookie: cookiesArray 
-                    } 
+                await play.setToken({
+                    youtube: {
+                        cookie: cookiesArray
+                    },
+                    user_agent: ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36']
                 });
                 console.log("✅ [COOKIES] Successfully loaded into Play-DL");
             } catch (e) {
                 console.error("❌ Cookies Parsing Error: Make sure YT_COOKIES is a valid JSON array");
             }
+            console.log("✅ Play-DL is ready with your account cookies!");
+        } else {
+            await play.setToken({
+                user_agent: ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36']
+            });
+            console.log("✅ Play-DL is ready (no cookies). Note: YouTube playback may be unstable without cookies.");
         }
-
-        await play.setToken({
-            user_agent: ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36']
-        });
-        
-        console.log("✅ Play-DL is ready with your account cookies!");
     } catch (error) {
         console.error("❌ Setup error:", error.message);
     }
 }
-
 
 class MusicService {
     constructor(client, options = {}) {
         this.client = client;
         this.group = options.group || 'default';
         this.guildStates = new Map();
+
+        // Best-effort init; don't block bot startup.
+        initializePlayDL().catch(() => { });
     }
 
     _getState(guildId) {
@@ -92,6 +95,24 @@ class MusicService {
 
     // --- مصدر وحيد: SoundCloud أولاً لتفادي مشاكل يوتيوب / DNS ---
     async _resolveQuery(query) {
+        // If it's already a valid URL, don't search.
+        if (query && typeof query === 'string') {
+            const trimmed = query.trim();
+            if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+                try {
+                    new URL(trimmed);
+                    return {
+                        url: trimmed,
+                        title: trimmed,
+                        thumbnail: null,
+                        duration: null
+                    };
+                } catch (_) {
+                    // fall through to search
+                }
+            }
+        }
+
         // 1) حاول تجيب تراك من ساوند كلاود أولاً (أكثر ثباتاً على Railway)
         const scResults = await play.search(query, {
             limit: 1,
@@ -140,6 +161,13 @@ class MusicService {
         if (!videoUrl || typeof videoUrl !== 'string' || videoUrl === 'undefined') {
             throw new Error('Invalid or missing URL for streaming');
         }
+
+        // Validate URL early to avoid play-dl throwing cryptic errors.
+        try {
+            new URL(videoUrl);
+        } catch (e) {
+            throw new Error(`Invalid URL for streaming: ${videoUrl}`);
+        }
         
         return await play.stream(videoUrl, { 
             quality: 0, 
@@ -152,6 +180,9 @@ class MusicService {
     async _playNow(guildId, track) {
         const state = this._getState(guildId);
         try {
+            if (!track?.url) {
+                throw new Error('Track has no URL to play');
+            }
             const stream = await this._getAudioUrl(track.url);
             const resource = createAudioResource(stream.stream, { inputType: stream.type, inlineVolume: true });
             resource.volume?.setVolume(state.volume);
@@ -177,6 +208,9 @@ class MusicService {
         state.textChannelId = textChannelId;
         await this._ensureConnection(guildId, voiceChannelId);
         const res = await this._resolveQuery(query);
+        if (!res?.url || typeof res.url !== 'string' || res.url === 'undefined') {
+            throw new Error('Could not resolve a playable URL for this track.');
+        }
         const track = { ...res, requestedBy: userId };
 
         if (!state.nowPlaying && !state.playing) {
