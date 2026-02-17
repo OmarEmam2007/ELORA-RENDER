@@ -194,8 +194,20 @@ class MusicService {
             }
         }
 
+        let normalizedParsed;
+        try {
+            normalizedParsed = new URL(normalizedUrl);
+        } catch (_) {
+            normalizedParsed = parsed;
+        }
+
+        const normalizedHost = (normalizedParsed.hostname || '').toLowerCase();
+        const isYouTube = normalizedHost.includes('youtube.com') || normalizedHost === 'youtu.be';
+
+        console.log(`Normalized URL: ${normalizedUrl}`);
+
         // For YouTube, prefer video_info -> stream_from_info (more reliable).
-        if (normalizedUrl.includes('youtube.com/watch')) {
+        if (isYouTube && normalizedUrl.includes('youtube.com/watch')) {
             const info = await play.video_info(normalizedUrl);
             return await play.stream_from_info(info, {
                 quality: 0,
@@ -223,7 +235,14 @@ class MusicService {
             } catch (e) {
                 // Option 2: fallback to SoundCloud if YouTube fails (common on hosted environments).
                 const urlStr = String(track.url);
-                const isYouTube = urlStr.includes('youtube.com') || urlStr.includes('youtu.be');
+                let isYouTube = false;
+                try {
+                    const u = new URL(urlStr);
+                    const h = (u.hostname || '').toLowerCase();
+                    isYouTube = h.includes('youtube.com') || h === 'youtu.be';
+                } catch (_) {
+                    isYouTube = urlStr.includes('youtube.com') || urlStr.includes('youtu.be');
+                }
                 if (!isYouTube) throw e;
 
                 const fallbackQuery = track.originalQuery || track.title || urlStr;
@@ -246,12 +265,18 @@ class MusicService {
                 track.thumbnail = first.thumbnail || track.thumbnail;
                 track.duration = first.durationInSec || track.duration;
 
-                stream = await this._getAudioUrl(track.url);
+                // Important: stream SoundCloud directly (avoid YouTube-specific path).
+                stream = await play.stream(track.url, {
+                    quality: 0,
+                    discordPlayerCompatibility: true,
+                    fallback: true
+                });
             }
             const resource = createAudioResource(stream.stream, { inputType: stream.type, inlineVolume: true });
             resource.volume?.setVolume(state.volume);
             state.nowPlaying = track; state.playing = true; state.resource = resource;
             state.player.play(resource);
+
             await this.updateController(guildId).catch(() => { });
         } catch (error) {
             console.error('Play error:', error);
