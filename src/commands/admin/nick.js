@@ -20,6 +20,18 @@ module.exports = {
             return message.reply('❌ Usage: `elora nick @member NewNickname` أو `elora nick @member reset`');
         }
 
+        const OWNER_ROLE_ID = '1461766723274412126';
+        const hasOwnerRole = message.member?.roles?.cache?.has(OWNER_ROLE_ID);
+        const isOwnerId = client?.config?.ownerId && message.author.id === client.config.ownerId;
+        const isOwner = hasOwnerRole || isOwnerId;
+
+        if (target.id === message.author.id && !isOwner) {
+            const lock = await NicknameLock.findOne({ guildId: message.guild.id, userId: target.id, locked: true }).catch(() => null);
+            if (lock) {
+                return message.reply('❌ This nickname is locked by the Owner. You can’t change it.');
+            }
+        }
+
         const mentionIndex = args.findIndex((a) => a.includes('<@'));
         const nickname = args.slice(Math.max(mentionIndex, 0) + 1).join(' ').trim();
 

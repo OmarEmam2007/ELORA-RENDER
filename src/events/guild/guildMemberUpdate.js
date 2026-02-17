@@ -12,9 +12,8 @@ module.exports = {
                 const OWNER_ROLE_ID = '1461766723274412126';
                 const hasOwnerRole = newMember.roles?.cache?.has(OWNER_ROLE_ID);
                 const isOwnerId = client?.config?.ownerId && newMember.id === client.config.ownerId;
-                const isStaff = newMember.permissions?.has(PermissionFlagsBits.ManageNicknames);
 
-                if (!hasOwnerRole && !isOwnerId && !isStaff) {
+                if (!hasOwnerRole && !isOwnerId) {
                     const lock = await NicknameLock.findOne({ guildId: newMember.guild.id, userId: newMember.id, locked: true }).catch(() => null);
                     if (lock) {
                         const desired = lock.nickname || null;
