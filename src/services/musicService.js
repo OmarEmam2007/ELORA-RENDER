@@ -168,15 +168,44 @@ class MusicService {
         }
 
         // Validate URL early to avoid play-dl throwing cryptic errors.
+        let parsed;
         try {
-            new URL(videoUrl);
+            parsed = new URL(videoUrl);
         } catch (e) {
             throw new Error(`Invalid URL for streaming: ${videoUrl}`);
         }
-        
-        return await play.stream(videoUrl, { 
-            quality: 0, 
-            discordPlayerCompatibility: true, 
+
+        // Normalize YouTube short links + strip tracking params.
+        let normalizedUrl = videoUrl;
+        const host = (parsed.hostname || '').toLowerCase();
+        if (host === 'youtu.be') {
+            const videoId = (parsed.pathname || '').replace('/', '').trim();
+            if (videoId) {
+                normalizedUrl = `https://www.youtube.com/watch?v=${videoId}`;
+            }
+        }
+        if (host.includes('youtube.com') || host.includes('youtu.be')) {
+            try {
+                const n = new URL(normalizedUrl);
+                const v = n.searchParams.get('v');
+                if (v) normalizedUrl = `https://www.youtube.com/watch?v=${v}`;
+            } catch (_) {
+                // ignore
+            }
+        }
+
+        // For YouTube, prefer video_info -> stream_from_info (more reliable).
+        if (normalizedUrl.includes('youtube.com/watch')) {
+            const info = await play.video_info(normalizedUrl);
+            return await play.stream_from_info(info, {
+                quality: 0,
+                discordPlayerCompatibility: true
+            });
+        }
+
+        return await play.stream(normalizedUrl, {
+            quality: 0,
+            discordPlayerCompatibility: true,
             htmert: false,
             fallback: true
         });
@@ -188,7 +217,37 @@ class MusicService {
             if (!track?.url) {
                 throw new Error('Track has no URL to play');
             }
-            const stream = await this._getAudioUrl(track.url);
+            let stream;
+            try {
+                stream = await this._getAudioUrl(track.url);
+            } catch (e) {
+                // Option 2: fallback to SoundCloud if YouTube fails (common on hosted environments).
+                const urlStr = String(track.url);
+                const isYouTube = urlStr.includes('youtube.com') || urlStr.includes('youtu.be');
+                if (!isYouTube) throw e;
+
+                const fallbackQuery = track.originalQuery || track.title || urlStr;
+                console.error('[MUSIC] YouTube stream failed, falling back to SoundCloud. Query:', fallbackQuery);
+
+                const scResults = await play.search(fallbackQuery, {
+                    limit: 1,
+                    source: { soundcloud: 'tracks' }
+                }).catch(() => []);
+
+                const first = scResults?.[0];
+                const scUrl = first?.url;
+                if (!scUrl || typeof scUrl !== 'string' || scUrl === 'undefined') {
+                    throw e;
+                }
+
+                // Switch track to SC.
+                track.url = scUrl;
+                track.title = `[SC] ${first.name || first.title || track.title || 'Unknown'}`;
+                track.thumbnail = first.thumbnail || track.thumbnail;
+                track.duration = first.durationInSec || track.duration;
+
+                stream = await this._getAudioUrl(track.url);
+            }
             const resource = createAudioResource(stream.stream, { inputType: stream.type, inlineVolume: true });
             resource.volume?.setVolume(state.volume);
             state.nowPlaying = track; state.playing = true; state.resource = resource;
@@ -217,7 +276,7 @@ class MusicService {
         if (!res?.url || typeof res.url !== 'string' || res.url === 'undefined') {
             throw new Error('Could not resolve a playable URL for this track.');
         }
-        const track = { ...res, requestedBy: userId };
+        const track = { ...res, requestedBy: userId, originalQuery: query };
 
         if (!state.nowPlaying && !state.playing) {
             state.nowPlaying = track; await this._playNow(guildId, track);
