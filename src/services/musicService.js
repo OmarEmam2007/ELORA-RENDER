@@ -14,6 +14,7 @@ const {
 const play = require('play-dl');
 
 let playDlInitPromise = null;
+let youtubeEnabled = true;
 
 async function initializePlayDL() {
     try {
@@ -29,9 +30,12 @@ async function initializePlayDL() {
                     },
                     user_agent: ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36']
                 });
+                youtubeEnabled = true;
                 console.log("✅ [COOKIES] Successfully loaded into Play-DL");
             } catch (e) {
                 console.error("❌ Cookies Parsing Error: Make sure YT_COOKIES is a valid JSON array");
+                // Without cookies, YouTube is very likely to fail on Railway with bot-check.
+                youtubeEnabled = false;
             }
             console.log("✅ Play-DL is ready with your account cookies!");
         } else {
@@ -39,9 +43,11 @@ async function initializePlayDL() {
                 user_agent: ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36']
             });
             console.log("✅ Play-DL is ready (no cookies). Note: YouTube playback may be unstable without cookies.");
+            youtubeEnabled = false;
         }
     } catch (error) {
         console.error("❌ Setup error:", error.message);
+        youtubeEnabled = false;
     }
 }
 
@@ -104,19 +110,33 @@ class MusicService {
         if (query && typeof query === 'string') {
             const trimmed = query.trim();
             if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+                let u;
                 try {
-                    new URL(trimmed);
-                    return {
-                        url: trimmed,
-                        title: trimmed,
-                        thumbnail: null,
-                        duration: null
-                    };
+                    u = new URL(trimmed);
                 } catch (_) {
-                    // fall through to search
+                    u = null;
+                }
+
+                if (u) {
+                    const h = (u.hostname || '').toLowerCase();
+                    const isYT = h.includes('youtube.com') || h === 'youtu.be';
+
+                    // If it's a direct YouTube URL and YouTube is disabled (Railway bot-check),
+                    // don't return it as-is. Force fallback to SoundCloud search.
+                    if (!(isYT && !youtubeEnabled)) {
+                        return {
+                            url: trimmed,
+                            title: trimmed,
+                            thumbnail: null,
+                            duration: null
+                        };
+                    }
                 }
             }
         }
+
+        const qStr = String(query || '').trim();
+        const shouldAttemptYouTubeSearch = youtubeEnabled;
 
         // 1) حاول تجيب تراك من ساوند كلاود أولاً (أكثر ثباتاً على Railway)
         const scResults = await play.search(query, {
@@ -139,6 +159,11 @@ class MusicService {
         }
 
         // 2) آخر محاولة: بحث خفيف في يوتيوب (قد ينجح على بعض الأغاني)
+        // On Railway, YouTube frequently fails without cookies (bot-check), so skip this unless enabled.
+        if (!shouldAttemptYouTubeSearch) {
+            throw new Error('No playable results from SoundCloud. (YouTube search disabled: missing/invalid cookies)');
+        }
+
         const ytResults = await play.search(query, {
             limit: 1,
             source: { youtube: 'video' }

@@ -36,6 +36,21 @@ module.exports = {
         // Rotate every 30 seconds
         setInterval(updateStatus, 30 * 1000);
 
+        // --- 🔢 Member Count Voice Channel Bootstrap (best-effort) ---
+        try {
+            for (const [guildId] of client.guilds.cache) {
+                try {
+                    if (typeof client.queueMemberCountUpdate === 'function') {
+                        client.queueMemberCountUpdate(guildId);
+                    }
+                } catch (_) {
+                    // ignore
+                }
+            }
+        } catch (_) {
+            // ignore
+        }
+
         // --- 🎫 Invite Cache Bootstrap ---
         // Used by guildMemberAdd to determine which invite was used.
         // Requires the bot to have Manage Server permission to fetch invites.

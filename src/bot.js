@@ -70,6 +70,84 @@ client1.clones = [client1, client2, client3]; // Array of all available bots
 client1.commands = new Collection();
 client1.config = require('../config.json');
 
+// --- Member Count VC (top of server list) ---
+client1._memberCount = {
+    channelIds: new Map(),
+    updateTimers: new Map(),
+    lastRenameAt: new Map()
+};
+
+client1._formatMemberCountName = (count) => `ɴᴏ. ᴏғ ᴍᴇᴍʙᴇʀs : ${count}`;
+
+client1._ensureMemberCountChannel = async (guild) => {
+    try {
+        const existingId = client1._memberCount.channelIds.get(guild.id);
+        const cached = existingId ? guild.channels.cache.get(existingId) : null;
+        if (cached && cached.type === 2) return cached;
+
+        // Try to find by prefix if we lost the ID.
+        const found = guild.channels.cache.find(c => c.type === 2 && typeof c.name === 'string' && c.name.startsWith('ɴᴏ. ᴏғ ᴍᴇᴍʙᴇʀs :'));
+        if (found) {
+            client1._memberCount.channelIds.set(guild.id, found.id);
+            return found;
+        }
+
+        const everyoneId = guild.roles.everyone.id;
+        const channel = await guild.channels.create({
+            name: client1._formatMemberCountName(guild.memberCount),
+            type: 2,
+            permissionOverwrites: [
+                { id: everyoneId, deny: ['Connect', 'Speak'] }
+            ]
+        });
+
+        // Put it at the very top.
+        await channel.setPosition(0).catch(() => { });
+        client1._memberCount.channelIds.set(guild.id, channel.id);
+        return channel;
+    } catch (e) {
+        console.error('[MemberCount] ensure channel error:', e);
+        return null;
+    }
+};
+
+client1.updateMemberCountChannel = async (guildId) => {
+    const guild = client1.guilds.cache.get(guildId);
+    if (!guild) return;
+
+    const channel = await client1._ensureMemberCountChannel(guild);
+    if (!channel) return;
+
+    const desiredName = client1._formatMemberCountName(guild.memberCount);
+    if (channel.name === desiredName) return;
+
+    // Rate-limit safety: don't rename too frequently.
+    const now = Date.now();
+    const last = client1._memberCount.lastRenameAt.get(guildId) || 0;
+    if (now - last < 15_000) return;
+
+    try {
+        await channel.setName(desiredName);
+        client1._memberCount.lastRenameAt.set(guildId, Date.now());
+    } catch (e) {
+        // If Discord rate-limits renames, retry later without crashing.
+        const retryAfterMs = Number(e?.retry_after) ? Number(e.retry_after) * 1000 : 30_000;
+        console.error('[MemberCount] rename failed, will retry:', e?.message || e);
+        client1._memberCount.lastRenameAt.set(guildId, Date.now());
+        setTimeout(() => client1.updateMemberCountChannel(guildId).catch(() => { }), retryAfterMs).unref?.();
+    }
+};
+
+client1.queueMemberCountUpdate = (guildId) => {
+    const timers = client1._memberCount.updateTimers;
+    if (timers.has(guildId)) clearTimeout(timers.get(guildId));
+    const t = setTimeout(() => {
+        timers.delete(guildId);
+        client1.updateMemberCountChannel(guildId).catch(() => { });
+    }, 3_000);
+    timers.set(guildId, t);
+};
+
 // Add isElora2 property to clones
 client2.isElora2 = true;
 client3.isElora2 = false;

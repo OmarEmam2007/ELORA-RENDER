@@ -5,6 +5,15 @@ module.exports = {
     name: 'guildMemberRemove',
     async execute(member, client) {
         try {
+            // --- 🔢 Member Count Voice Channel Update (best-effort) ---
+            try {
+                if (typeof client.queueMemberCountUpdate === 'function') {
+                    client.queueMemberCountUpdate(member.guild.id);
+                }
+            } catch (_) {
+                // ignore
+            }
+
             // --- 🎫 Invite Leave Tracking ---
             // Best-effort: never block goodbye message.
             try {

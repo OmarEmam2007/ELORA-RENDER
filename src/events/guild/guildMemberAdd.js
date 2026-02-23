@@ -10,6 +10,15 @@ module.exports = {
         try {
             console.log(`👤 New Hero Detected: ${member.user.tag}`);
 
+            // --- 🔢 Member Count Voice Channel Update (best-effort) ---
+            try {
+                if (typeof client.queueMemberCountUpdate === 'function') {
+                    client.queueMemberCountUpdate(member.guild.id);
+                }
+            } catch (_) {
+                // ignore
+            }
+
             // --- 🎫 Invite Tracking & Rewards (Cumulative) ---
             // Best-effort: never block onboarding if invite tracking fails.
             try {
