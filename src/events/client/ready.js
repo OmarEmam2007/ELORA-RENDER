@@ -103,8 +103,8 @@ module.exports = {
                     const inviterMember = await guild.members.fetch(s.userId).catch(() => null);
                     if (!inviterMember) continue;
 
-                    const total = s.inviteCount || 0;
-                    const eligibleTiers = roleTiers.filter(t => total >= t.invites);
+                    const netInvites = Math.max(0, (s.regularInvites || 0) - (s.leaves || 0));
+                    const eligibleTiers = roleTiers.filter(t => netInvites >= t.invites);
                     const highestTier = eligibleTiers.length ? eligibleTiers[eligibleTiers.length - 1] : null;
 
                     const tierRoleIds = roleTiers.map(t => t.roleId);

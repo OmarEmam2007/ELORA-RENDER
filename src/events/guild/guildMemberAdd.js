@@ -95,8 +95,8 @@ module.exports = {
                         // Apply cumulative roles
                         const inviterMember = await guild.members.fetch(inviterId).catch(() => null);
                         if (inviterMember) {
-                            const total = inviterStats.inviteCount || 0;
-                            const eligibleTiers = roleTiers.filter(t => total >= t.invites);
+                            const netInvites = Math.max(0, (inviterStats.regularInvites || 0) - (inviterStats.leaves || 0));
+                            const eligibleTiers = roleTiers.filter(t => netInvites >= t.invites);
                             const highestTier = eligibleTiers.length ? eligibleTiers[eligibleTiers.length - 1] : null;
 
                             const tierRoleIds = roleTiers.map(t => t.roleId);
