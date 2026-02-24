@@ -15,6 +15,10 @@ module.exports = {
             sub.setName('list')
                 .setDescription('List recent backups for this server.'))
         .addSubcommand(sub =>
+            sub.setName('info')
+                .setDescription('Show details about a backup id (safe / no changes).')
+                .addStringOption(o => o.setName('id').setDescription('Backup document id').setRequired(true)))
+        .addSubcommand(sub =>
             sub.setName('restore')
                 .setDescription('RESTORE (wipe + rebuild) from a backup id. DANGEROUS!')
                 .addStringOption(o => o.setName('id').setDescription('Backup document id').setRequired(true))
@@ -68,6 +72,28 @@ module.exports = {
             });
 
             return interaction.editReply({ content: `Recent backups:\n${lines.join('\n')}` });
+        }
+
+        if (sub === 'info') {
+            await interaction.deferReply({ ephemeral: true });
+            const id = interaction.options.getString('id');
+
+            const doc = await GuildBackup.findOne({ _id: id, guildId: interaction.guild.id }).lean().catch(() => null);
+            if (!doc) return interaction.editReply({ content: '❌ Backup not found for this server.' });
+
+            const rolesCount = Array.isArray(doc.snapshot?.roles) ? doc.snapshot.roles.length : 0;
+            const channelsCount = Array.isArray(doc.snapshot?.channels) ? doc.snapshot.channels.length : 0;
+            const note = doc.note ? `\nNote: ${doc.note}` : '';
+
+            return interaction.editReply({
+                content:
+                    `Backup info:\n` +
+                    `ID: ${doc._id}\n` +
+                    `CreatedAt: ${new Date(doc.createdAt).toISOString()}\n` +
+                    `Roles: ${rolesCount}\n` +
+                    `Channels: ${channelsCount}` +
+                    note
+            });
         }
 
         if (sub === 'restore') {
