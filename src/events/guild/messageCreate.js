@@ -10,6 +10,7 @@ const { logDetection } = require('../../utils/moderation/patternLearner');
 const CustomReply = require('../../models/CustomReply');
 const THEME = require('../../utils/theme');
 const heistCommand = require('../../commands/economy/heist');
+const { getGuildLogChannel } = require('../../utils/getGuildLogChannel');
 
 // Global buffer initialization (if not exists)
 if (!global.messageBuffer) global.messageBuffer = [];
@@ -115,16 +116,81 @@ module.exports = {
         // Prefix check moved to end to allow passive systems (Link/Anti-Virus) to work globally
         // if (!message.content.startsWith(client.config.prefix)) return;
 
-        // 1. Link Protection
-        const linkType = checkLink(message.content);
-        if (linkType === 'INVITE') {
-            // Allow admins/mods to post
-            if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+        // --- 🛡️ Lightweight Moderation (Normal/Strict) ---
+        // English-only for all new moderation outputs.
+        let modSettings = null;
+        try {
+            modSettings = await ModSettings.findOne({ guildId: message.guild.id }).catch(() => null);
+        } catch (e) {
+            modSettings = null;
+        }
+
+        const isModLiteEnabled = modSettings?.enabled !== false;
+        const modLiteMode = modSettings?.mode || 'normal';
+
+        const whitelistRoles = Array.isArray(modSettings?.whitelistRoles) ? modSettings.whitelistRoles : [];
+        const whitelistChannels = Array.isArray(modSettings?.whitelistChannels) ? modSettings.whitelistChannels : [];
+
+        const isWhitelisted = Boolean(
+            (message.channelId && whitelistChannels.includes(message.channelId)) ||
+            (message.member?.roles?.cache && whitelistRoles.some(r => message.member.roles.cache.has(r)))
+        );
+
+        const hasBypassPerms = Boolean(
+            message.member?.permissions?.has(PermissionFlagsBits.ManageMessages) ||
+            message.member?.permissions?.has(PermissionFlagsBits.ManageGuild) ||
+            message.member?.permissions?.has(PermissionFlagsBits.Administrator)
+        );
+
+        // Defaults tuned for NORMAL.
+        const sensitivity = Math.max(1, Math.min(5, Number(modSettings?.sensitivity || 3)));
+        const spamWindowMs = modLiteMode === 'strict' ? 6000 : 5000;
+        const spamLimit = modLiteMode === 'strict' ? (6 - sensitivity) : (7 - sensitivity);
+        const timeoutSeconds = modLiteMode === 'strict' ? 120 : 60;
+
+        const shouldApplyModLite = isModLiteEnabled && !isWhitelisted && !hasBypassPerms;
+
+        // 1) Anti-Invite Links (always on in normal/strict)
+        if (shouldApplyModLite) {
+            const linkType = checkLink(message.content);
+            if (linkType === 'INVITE') {
                 await message.delete().catch(() => { });
+
                 const warningMsg = await message.channel.send({
-                    content: `${message.author}, ⚠️ Unauthorized invite links are not allowed!`
-                });
-                setTimeout(() => warningMsg.delete().catch(() => { }), 5000);
+                    content: `${message.author}, invite links are not allowed here.`
+                }).catch(() => null);
+                if (warningMsg) setTimeout(() => warningMsg.delete().catch(() => { }), 6000);
+
+                // Log to mod logs channel (best-effort)
+                const logChannel = await getGuildLogChannel(message.guild, client);
+                if (logChannel) {
+                    const caseId = (await ModLog.countDocuments({ guildId: message.guild.id }).catch(() => 0)) + 1;
+                    await ModLog.create({
+                        guildId: message.guild.id,
+                        caseId,
+                        userId: message.author.id,
+                        type: 'Link',
+                        content: message.content,
+                        severity: 'Severe',
+                        confidence: 100,
+                        status: 'Active'
+                    }).catch(() => null);
+
+                    const embed = new EmbedBuilder()
+                        .setColor('#ED4245')
+                        .setTitle('Lightweight Moderation')
+                        .setDescription('Blocked an invite link.')
+                        .addFields(
+                            { name: 'User', value: `${message.author} (\`${message.author.id}\`)`, inline: true },
+                            { name: 'Channel', value: `${message.channel} (\`${message.channelId}\`)`, inline: true },
+                            { name: 'Mode', value: `\`${modLiteMode}\``, inline: true },
+                            { name: 'Content', value: `\`\`\`${String(message.content || '').slice(0, 900)}\`\`\``, inline: false }
+                        )
+                        .setTimestamp();
+                    await logChannel.send({ embeds: [embed] }).catch(() => { });
+                }
+
+                return;
             }
         }
 
@@ -204,15 +270,48 @@ module.exports = {
 
         // 2. Anti-Spam (Auto-Punish)
         // Limit: 5 messages in 5 seconds
-        if (checkRateLimit(message.guild.id, message.author.id, 'message', 5, 5000)) {
-            // Mute the user
+        if (shouldApplyModLite && checkRateLimit(message.guild.id, message.author.id, 'message', spamLimit, spamWindowMs)) {
             try {
-                if (message.member.moderatable) {
-                    await message.member.timeout(60 * 1000, 'Anti-Spam: Sending messages too fast');
-                    await message.channel.send(`${message.author} has been muted for 1 minute for spamming.`);
+                const didTimeout = Boolean(message.member?.moderatable);
+                if (didTimeout) {
+                    await message.member.timeout(timeoutSeconds * 1000, 'Anti-Spam: Sending messages too fast');
+                }
+
+                const notice = await message.channel.send({
+                    content: `${message.author}, please slow down. Continued spam may result in more severe actions.`
+                }).catch(() => null);
+                if (notice) setTimeout(() => notice.delete().catch(() => { }), 7000);
+
+                const logChannel = await getGuildLogChannel(message.guild, client);
+                if (logChannel) {
+                    const caseId = (await ModLog.countDocuments({ guildId: message.guild.id }).catch(() => 0)) + 1;
+                    await ModLog.create({
+                        guildId: message.guild.id,
+                        caseId,
+                        userId: message.author.id,
+                        type: 'Spam',
+                        content: message.content,
+                        severity: modLiteMode === 'strict' ? 'Severe' : 'Mild',
+                        confidence: 100,
+                        status: 'Active'
+                    }).catch(() => null);
+
+                    const embed = new EmbedBuilder()
+                        .setColor('#FEE75C')
+                        .setTitle('Lightweight Moderation')
+                        .setDescription('Detected message spam rate-limit.')
+                        .addFields(
+                            { name: 'User', value: `${message.author} (\`${message.author.id}\`)`, inline: true },
+                            { name: 'Channel', value: `${message.channel} (\`${message.channelId}\`)`, inline: true },
+                            { name: 'Mode', value: `\`${modLiteMode}\``, inline: true },
+                            { name: 'Threshold', value: `\`${spamLimit} msgs / ${Math.round(spamWindowMs / 1000)}s\``, inline: true },
+                            { name: 'Action', value: didTimeout ? `Timeout \`${timeoutSeconds}s\`` : 'No action (not moderatable)', inline: true }
+                        )
+                        .setTimestamp();
+                    await logChannel.send({ embeds: [embed] }).catch(() => { });
                 }
             } catch (e) {
-                console.error(`Failed to mute spammer ${message.author.tag}:`, e);
+                console.error(`Failed to handle spammer ${message.author.tag}:`, e);
             }
         }
 

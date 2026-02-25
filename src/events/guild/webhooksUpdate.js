@@ -1,4 +1,6 @@
 const { AuditLogEvent } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
+const { getGuildLogChannel } = require('../../utils/getGuildLogChannel');
 
 module.exports = {
     name: 'webhooksUpdate',
@@ -32,7 +34,20 @@ module.exports = {
                         console.log(`🚨 Unauthorized Webhook Detected: ${webhook.name} in ${channel.name} by ${entry.executor.tag}`);
                         await webhook.delete('Security: Unauthorized Webhook detected.');
 
-                        // Notify owner/log channel could be added here
+                        const logChannel = await getGuildLogChannel(channel.guild, client);
+                        if (logChannel) {
+                            const embed = new EmbedBuilder()
+                                .setTitle('🪝 Webhook Removed')
+                                .setDescription('An unauthorized webhook was detected and removed.')
+                                .addFields(
+                                    { name: 'Channel', value: `${channel}`, inline: true },
+                                    { name: 'Webhook', value: `${webhook.name} (\`${webhook.id}\`)`, inline: true },
+                                    { name: 'Executor', value: `${entry.executor.tag} (\`${entry.executor.id}\`)`, inline: true }
+                                )
+                                .setColor(client?.config?.colors?.warning || '#FEE75C')
+                                .setTimestamp();
+                            await logChannel.send({ embeds: [embed] }).catch(() => { });
+                        }
                     }
                 }
             });

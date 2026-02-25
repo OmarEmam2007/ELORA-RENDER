@@ -1,4 +1,6 @@
 const User = require('../../models/User');
+const { EmbedBuilder } = require('discord.js');
+const { getGuildLogChannel } = require('../../utils/getGuildLogChannel');
 
 module.exports = {
     name: 'voiceStateUpdate',
@@ -14,6 +16,41 @@ module.exports = {
             const guildId = guild.id;
 
             const now = Date.now();
+
+            // --- Advanced Voice Logs (join/leave/move) ---
+            try {
+                const oldCh = oldState.channel;
+                const newCh = newState.channel;
+                if (oldCh?.id !== newCh?.id) {
+                    const logChannel = await getGuildLogChannel(guild, client);
+                    if (logChannel) {
+                        let title = '🔊 Voice State Updated';
+                        const fields = [{ name: 'User', value: `${member.user.tag} (\`${member.id}\`)`, inline: true }];
+
+                        if (!oldCh && newCh) {
+                            title = '🔊 Voice Joined';
+                            fields.push({ name: 'Channel', value: `${newCh} (\`${newCh.id}\`)`, inline: true });
+                        } else if (oldCh && !newCh) {
+                            title = '🔇 Voice Left';
+                            fields.push({ name: 'Channel', value: `${oldCh} (\`${oldCh.id}\`)`, inline: true });
+                        } else if (oldCh && newCh) {
+                            title = '🔁 Voice Moved';
+                            fields.push({ name: 'From', value: `${oldCh} (\`${oldCh.id}\`)`, inline: true });
+                            fields.push({ name: 'To', value: `${newCh} (\`${newCh.id}\`)`, inline: true });
+                        }
+
+                        const embed = new EmbedBuilder()
+                            .setTitle(title)
+                            .setColor(client?.config?.colors?.info || '#5865F2')
+                            .addFields(fields)
+                            .setTimestamp();
+
+                        await logChannel.send({ embeds: [embed] }).catch(() => { });
+                    }
+                }
+            } catch (_) {
+                // Best-effort
+            }
 
             // Joined a voice channel
             if (!oldState.channelId && newState.channelId) {

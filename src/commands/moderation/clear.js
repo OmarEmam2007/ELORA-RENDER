@@ -12,18 +12,22 @@ module.exports = {
                 .setMinValue(1)
                 .setMaxValue(100)
                 .setRequired(true))
-        .addUserOption(option => option.setName('target').setDescription('Only delete from this user (optional)')),
+        .addUserOption(option => option.setName('target').setDescription('Only delete from this user (optional)'))
+        .addBooleanOption(option => option.setName('bots').setDescription('Only delete messages sent by bots (optional)'))
+        .addStringOption(option => option.setName('contains').setDescription('Only delete messages containing this text (optional)').setMaxLength(100)),
 
     async execute(interaction, client, args) {
         // --- 1. Hybrid Input ---
         const isSlash = interaction.isChatInputCommand?.();
         const user = isSlash ? interaction.user : interaction.author;
 
-        let amount, targetUser;
+        let amount, targetUser, botsOnly, contains;
 
         if (isSlash) {
             amount = interaction.options.getInteger('amount');
             targetUser = interaction.options.getUser('target');
+            botsOnly = interaction.options.getBoolean('bots');
+            contains = interaction.options.getString('contains');
         } else {
             // Prefix: !clear [Amount] [Optional: @User]
             amount = parseInt(args[0]);
@@ -58,6 +62,15 @@ module.exports = {
             let toDelete = messages;
             if (targetUser) {
                 toDelete = messages.filter(m => m.author.id === targetUser.id);
+            }
+
+            if (botsOnly) {
+                toDelete = toDelete.filter(m => Boolean(m.author?.bot));
+            }
+
+            if (contains && contains.trim().length) {
+                const needle = contains.trim().toLowerCase();
+                toDelete = toDelete.filter(m => String(m.content || '').toLowerCase().includes(needle));
             }
 
             // Delete

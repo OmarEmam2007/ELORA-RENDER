@@ -1,6 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { PermissionFlagsBits } = require('discord.js');
 const NicknameLock = require('../../models/NicknameLock');
+const { getGuildLogChannel } = require('../../utils/getGuildLogChannel');
 
 module.exports = {
     name: 'guildMemberUpdate',
@@ -30,10 +31,7 @@ module.exports = {
                 // Best-effort
             }
 
-            let logChannel = oldMember.guild.channels.cache.get(client.config.logChannelId);
-            if (!logChannel) {
-                logChannel = oldMember.guild.channels.cache.find(c => c.name.toLowerCase().includes('logs') && c.isTextBased());
-            }
+            const logChannel = await getGuildLogChannel(oldMember.guild, client);
             if (logChannel) {
                 const embed = new EmbedBuilder()
                     .setTitle('🏷️ Nickname Changed')

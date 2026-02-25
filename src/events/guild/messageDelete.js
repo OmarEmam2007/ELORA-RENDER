@@ -1,5 +1,6 @@
 const { EmbedBuilder, AuditLogEvent } = require('discord.js');
 const THEME = require('../../utils/theme');
+const { getGuildLogChannel } = require('../../utils/getGuildLogChannel');
 
 module.exports = {
     name: 'messageDelete',
@@ -7,9 +8,7 @@ module.exports = {
         if (!message.author) return; 
         if (message.author.bot) return;
 
-        // 1. Get Log Channel from Config
-        const logChannel = message.guild.channels.cache.get(client.config.logChannelId);
-
+        const logChannel = await getGuildLogChannel(message.guild, client);
         if (!logChannel) return;
 
         const embed = new EmbedBuilder()

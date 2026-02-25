@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const modSettingsSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     enabled: { type: Boolean, default: true },
+    mode: { type: String, enum: ['normal', 'strict'], default: 'normal' },
     logChannelId: { type: String, default: null },
     sensitivity: { type: Number, default: 3 }, // 1-5
     multilingual: { type: Boolean, default: true },

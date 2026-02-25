@@ -1,4 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
+const { getGuildLogChannel } = require('../../utils/getGuildLogChannel');
 
 module.exports = {
     name: 'messageUpdate',
@@ -6,13 +7,7 @@ module.exports = {
         if (!oldMessage.author || oldMessage.author.bot) return;
         if (oldMessage.content === newMessage.content) return; // Only process content changes
 
-        // 1. Try to find by ID from config (Best)
-        let logChannel = oldMessage.guild.channels.cache.get(client.config.logChannelId);
-
-        // 2. Fallback: Try to find by name
-        if (!logChannel) {
-            logChannel = oldMessage.guild.channels.cache.find(c => c.name.toLowerCase().includes('logs') && c.isTextBased());
-        }
+        const logChannel = await getGuildLogChannel(oldMessage.guild, client);
         if (!logChannel) return;
 
         const embed = new EmbedBuilder()

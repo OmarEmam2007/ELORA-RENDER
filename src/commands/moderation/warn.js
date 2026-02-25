@@ -1,102 +1,119 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const ModSettings = require('../../models/ModSettings'); // Assuming this exists or we might mock it if missing
-// We should probably create a simpler Schema for warns if needed, but for now assuming some DB structure exists or using simple DM
+const WarnCase = require('../../models/WarnCase');
 const THEME = require('../../utils/theme');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('warn')
-        .setDescription('Issues a Lunar Warning to a user.')
+        .setDescription('Warn a user and manage warning cases.')
         .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
-        .addUserOption(option => option.setName('target').setDescription('The user to warn').setRequired(true))
-        .addStringOption(option => option.setName('reason').setDescription('Reason for the warning').setRequired(true)),
+        .addSubcommand(sub =>
+            sub.setName('add')
+                .setDescription('Issue a warning to a user.')
+                .addUserOption(option => option.setName('target').setDescription('The user to warn').setRequired(true))
+                .addStringOption(option => option.setName('reason').setDescription('Reason for the warning').setRequired(true))
+        )
+        .addSubcommand(sub =>
+            sub.setName('list')
+                .setDescription('List warnings for a user.')
+                .addUserOption(option => option.setName('target').setDescription('The user').setRequired(true))
+        )
+        .addSubcommand(sub =>
+            sub.setName('clear')
+                .setDescription('Clear all warnings for a user.')
+                .addUserOption(option => option.setName('target').setDescription('The user').setRequired(true))
+        ),
 
     async execute(interaction, client, args) {
-        // --- 1. Hybrid Input ---
-        const isSlash = interaction.isChatInputCommand?.();
-        const user = isSlash ? interaction.user : interaction.author;
+        if (!interaction.isChatInputCommand?.()) return;
+        if (!interaction.guild) return interaction.reply({ content: 'This command can only be used in a server.', ephemeral: true });
 
-        let targetUser, reason;
+        const sub = interaction.options.getSubcommand();
 
-        if (isSlash) {
-            targetUser = interaction.options.getUser('target');
-            reason = interaction.options.getString('reason');
-        } else {
-            // !warn @User Reason
-            const targetId = args[0]?.replace(/[<@!>]/g, '');
-            if (!targetId || !args[1]) {
-                return interaction.reply({
-                    embeds: [new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription(`${THEME.ICONS.CROSS} **Usage:** \`!warn @User [Reason]\``)]
-                });
-            }
-            try {
-                targetUser = await client.users.fetch(targetId);
-            } catch (error) {
-                return interaction.reply({ content: '❌ Invalid User', ephemeral: true });
-            }
-            reason = args.slice(1).join(' ');
+        if (sub === 'list') {
+            const target = interaction.options.getUser('target');
+            const warns = await WarnCase.find({ guildId: interaction.guildId, userId: target.id })
+                .sort({ createdAt: -1 })
+                .limit(20)
+                .catch(() => []);
+
+            const desc = warns.length
+                ? warns.map((w, i) => `**${i + 1}.** <t:${Math.floor(new Date(w.createdAt).getTime() / 1000)}:R> — ${w.reason} (by <@${w.moderatorId}>)`).join('\n')
+                : 'No warnings found.';
+
+            const embed = new EmbedBuilder()
+                .setColor(THEME.COLORS.WARNING)
+                .setTitle(`⚠️ Warnings for ${target.tag}`)
+                .setDescription(desc)
+                .setFooter(THEME.FOOTER);
+
+            return interaction.reply({ embeds: [embed], ephemeral: true });
         }
 
-        // --- 2. Animation ---
-        const frames = [
-            '⚠️ Detecting Violation...',
-            '📝 Logging Infraction...',
-            '📡 Transmitting Warning...'
-        ];
-
-        let msg;
-        const initEmbed = new EmbedBuilder().setColor(THEME.COLORS.WARNING).setDescription(`${frames[0]}`);
-        if (isSlash) {
-            await interaction.reply({ embeds: [initEmbed] });
-            msg = interaction;
-        } else {
-            msg = await interaction.reply({ embeds: [initEmbed] });
+        if (sub === 'clear') {
+            const target = interaction.options.getUser('target');
+            const res = await WarnCase.deleteMany({ guildId: interaction.guildId, userId: target.id }).catch(() => null);
+            const deleted = res?.deletedCount || 0;
+            return interaction.reply({ content: `✅ Cleared ${deleted} warning(s) for ${target}.`, ephemeral: true });
         }
 
-        for (let i = 1; i < frames.length; i++) {
-            await new Promise(r => setTimeout(r, 600));
-            const embed = new EmbedBuilder().setColor(THEME.COLORS.WARNING).setDescription(`${frames[i]}`);
-            if (isSlash) await interaction.editReply({ embeds: [embed] });
-            else await msg.edit({ embeds: [embed] });
-        }
+        if (sub !== 'add') return;
 
-        // --- 3. Execute ---
+        const targetUser = interaction.options.getUser('target');
+        const reason = interaction.options.getString('reason');
+
+        await interaction.deferReply({ ephemeral: true });
+
         try {
-            // Send DM
+            await WarnCase.create({
+                guildId: interaction.guildId,
+                userId: targetUser.id,
+                moderatorId: interaction.user.id,
+                reason
+            });
+
+            const warnCount = await WarnCase.countDocuments({ guildId: interaction.guildId, userId: targetUser.id }).catch(() => 0);
+
             const dmEmbed = new EmbedBuilder()
                 .setColor(THEME.COLORS.WARNING)
                 .setTitle(`⚠️ Warning from ${interaction.guild.name}`)
-                .setDescription(`You have received an official warning.\n\n**Reason:** ${reason}`)
+                .setDescription(`You have received an official warning.\n\n**Reason:** ${reason}\n**Total Warnings:** ${warnCount}`)
                 .setFooter(THEME.FOOTER)
                 .setTimestamp();
 
             await targetUser.send({ embeds: [dmEmbed] }).catch(() => { });
 
-            // Log to DB (Placeholder logic until explicit DB command given, though User model likely has warns)
-            // For now, visual confirmation is key.
+            let timeoutApplied = false;
+            if (warnCount >= 3) {
+                const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+                if (member?.moderatable) {
+                    const twelveHoursMs = 12 * 60 * 60 * 1000;
+                    await member.timeout(twelveHoursMs, 'Auto-timeout: reached warning threshold (3)').catch(() => null);
+                    timeoutApplied = true;
+                }
+            }
 
             const successEmbed = new EmbedBuilder()
                 .setColor(THEME.COLORS.WARNING)
-                .setAuthor({ 
-                    name: '⚠️ WARN ISSUED', 
-                    iconURL: targetUser.displayAvatarURL({ dynamic: true }) 
+                .setAuthor({
+                    name: '⚠️ WARNING ISSUED',
+                    iconURL: targetUser.displayAvatarURL({ dynamic: true })
                 })
                 .setDescription(
                     `**Target:** ${targetUser.tag}\n` +
                     `**Reason:** ${reason}\n` +
-                    `**Moderator:** ${user}`
+                    `**Moderator:** ${interaction.user}\n` +
+                    `**Total Warnings:** ${warnCount}\n` +
+                    `**Auto Action:** ${timeoutApplied ? '12h timeout applied' : 'None'}`
                 )
                 .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
                 .setTimestamp();
 
-            if (isSlash) await interaction.editReply({ embeds: [successEmbed] });
-            else await msg.edit({ embeds: [successEmbed] });
-
+            await interaction.editReply({ embeds: [successEmbed] });
         } catch (error) {
             console.error(error);
             const err = new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription('❌ Error issuing warning.');
-            if (isSlash) await interaction.editReply({ embeds: [err] });
-            else await msg.edit({ embeds: [err] });
+            await interaction.editReply({ embeds: [err] });
         }
     },
 };

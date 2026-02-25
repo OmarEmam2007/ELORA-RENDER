@@ -16,8 +16,27 @@ const play = require('play-dl');
 let playDlInitPromise = null;
 let youtubeEnabled = true;
 
+function isRailway() {
+    return Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID || process.env.RAILWAY_SERVICE_ID);
+}
+
+function isYouTubeDisabledByEnv() {
+    const v = String(process.env.DISABLE_YOUTUBE || '').trim().toLowerCase();
+    return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+}
+
 async function initializePlayDL() {
     try {
+        // Railway IPs are commonly blocked by YouTube (bot-check). If disabled, never attempt YouTube.
+        if (isRailway() || isYouTubeDisabledByEnv()) {
+            await play.setToken({
+                user_agent: ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36']
+            });
+            youtubeEnabled = false;
+            console.log(' [MUSIC] YouTube is disabled (Railway/DISABLE_YOUTUBE). Using SoundCloud/Spotify only.');
+            return;
+        }
+
         const rawCookies = process.env.YT_COOKIES;
 
         if (rawCookies) {
@@ -31,22 +50,22 @@ async function initializePlayDL() {
                     user_agent: ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36']
                 });
                 youtubeEnabled = true;
-                console.log("✅ [COOKIES] Successfully loaded into Play-DL");
+                console.log(" [COOKIES] Successfully loaded into Play-DL");
             } catch (e) {
-                console.error("❌ Cookies Parsing Error: Make sure YT_COOKIES is a valid JSON array");
+                console.error(" Cookies Parsing Error: Make sure YT_COOKIES is a valid JSON array");
                 // Without cookies, YouTube is very likely to fail on Railway with bot-check.
                 youtubeEnabled = false;
             }
-            console.log("✅ Play-DL is ready with your account cookies!");
+            console.log(" Play-DL is ready with your account cookies!");
         } else {
             await play.setToken({
                 user_agent: ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36']
             });
-            console.log("✅ Play-DL is ready (no cookies). Note: YouTube playback may be unstable without cookies.");
+            console.log(" Play-DL is ready (no cookies). Note: YouTube playback may be unstable without cookies.");
             youtubeEnabled = false;
         }
     } catch (error) {
-        console.error("❌ Setup error:", error.message);
+        console.error(" Setup error:", error.message);
         youtubeEnabled = false;
     }
 }

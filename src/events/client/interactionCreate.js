@@ -1,10 +1,13 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const ModSettings = require('../../models/ModSettings');
 const ModLog = require('../../models/ModLog');
+const GuildSecurityConfig = require('../../models/GuildSecurityConfig');
 const { recordDismissal } = require('../../utils/moderation/patternLearner');
 const { generateDashboard } = require('../../utils/moderation/modDashboard');
 const CustomReply = require('../../models/CustomReply');
 const THEME = require('../../utils/theme');
+const HelpCommand = require('../../commands/utility/help');
+const SettingsCommand = require('../../commands/utility/settings');
 
 module.exports = {
     name: 'interactionCreate',
@@ -29,10 +32,207 @@ module.exports = {
             } catch (_) {
                 return safeReply(payload);
             }
+
+        // --- ⚙️ SETTINGS PANEL MODALS (Admin only) ---
+        if (interaction.isModalSubmit() && (interaction.customId === 'settings_modal_whitelist_role' || interaction.customId === 'settings_modal_whitelist_channel')) {
+            if (!interaction.guild) return safeReply({ content: 'This interaction can only be used in a server.', ephemeral: true });
+            if (!interaction.member?.permissions?.has(PermissionFlagsBits.Administrator)) {
+                return safeReply({ content: '❌ Admin only.', ephemeral: true });
+            }
+
+            const cfgMod = await ModSettings.findOneAndUpdate(
+                { guildId: interaction.guildId },
+                { $setOnInsert: { guildId: interaction.guildId } },
+                { upsert: true, new: true }
+            );
+            const cfgSec = await GuildSecurityConfig.findOneAndUpdate(
+                { guildId: interaction.guildId },
+                { $setOnInsert: { guildId: interaction.guildId } },
+                { upsert: true, new: true }
+            );
+
+            if (interaction.customId === 'settings_modal_whitelist_role') {
+                const raw = interaction.fields.getTextInputValue('role_id')?.trim();
+                const roleId = raw?.replace(/[^0-9]/g, '');
+                if (!roleId) return safeReply({ content: '❌ Invalid role ID.', ephemeral: true });
+
+                const role = interaction.guild.roles.cache.get(roleId) || await interaction.guild.roles.fetch(roleId).catch(() => null);
+                if (!role) return safeReply({ content: '❌ Role not found in this server.', ephemeral: true });
+
+                const current = Array.isArray(cfgMod.whitelistRoles) ? cfgMod.whitelistRoles : [];
+                if (!current.includes(roleId)) {
+                    cfgMod.whitelistRoles = [...current, roleId];
+                    await cfgMod.save();
+                }
+
+                const embed = SettingsCommand.buildSettingsEmbed({ guild: interaction.guild, modSettings: cfgMod, secSettings: cfgSec });
+                const components = SettingsCommand.buildSettingsComponents({ modSettings: cfgMod, secSettings: cfgSec });
+                await safeReply({ content: `✅ Added ${role} to moderation whitelist.`, ephemeral: true });
+                return safeEdit({ embeds: [embed], components });
+            }
+
+            if (interaction.customId === 'settings_modal_whitelist_channel') {
+                const raw = interaction.fields.getTextInputValue('channel_id')?.trim();
+                const channelId = raw?.replace(/[^0-9]/g, '');
+                if (!channelId) return safeReply({ content: '❌ Invalid channel ID.', ephemeral: true });
+
+                const ch = interaction.guild.channels.cache.get(channelId) || await interaction.guild.channels.fetch(channelId).catch(() => null);
+                if (!ch) return safeReply({ content: '❌ Channel not found in this server.', ephemeral: true });
+
+                const current = Array.isArray(cfgMod.whitelistChannels) ? cfgMod.whitelistChannels : [];
+                if (!current.includes(channelId)) {
+                    cfgMod.whitelistChannels = [...current, channelId];
+                    await cfgMod.save();
+                }
+
+                const embed = SettingsCommand.buildSettingsEmbed({ guild: interaction.guild, modSettings: cfgMod, secSettings: cfgSec });
+                const components = SettingsCommand.buildSettingsComponents({ modSettings: cfgMod, secSettings: cfgSec });
+                await safeReply({ content: `✅ Added ${ch} to moderation whitelist.`, ephemeral: true });
+                return safeEdit({ embeds: [embed], components });
+            }
+        }
+
+        // --- ⚙️ SETTINGS PANEL SELECT MENU (Admin only) ---
+        if (interaction.isStringSelectMenu?.() && interaction.customId === 'settings_menu') {
+            if (!interaction.guild) return safeReply({ content: 'This interaction can only be used in a server.', ephemeral: true });
+            if (!interaction.member?.permissions?.has(PermissionFlagsBits.Administrator)) {
+                return safeReply({ content: '❌ Admin only.', ephemeral: true });
+            }
+
+            const choice = interaction.values?.[0] || 'overview';
+            const [cfgMod, cfgSec] = await Promise.all([
+                ModSettings.findOneAndUpdate(
+                    { guildId: interaction.guildId },
+                    { $setOnInsert: { guildId: interaction.guildId } },
+                    { upsert: true, new: true }
+                ),
+                GuildSecurityConfig.findOneAndUpdate(
+                    { guildId: interaction.guildId },
+                    { $setOnInsert: { guildId: interaction.guildId } },
+                    { upsert: true, new: true }
+                )
+            ]);
+
+            const embed = SettingsCommand.buildSettingsEmbed({ guild: interaction.guild, modSettings: cfgMod, secSettings: cfgSec });
+            if (choice === 'moderation') {
+                embed.setDescription('Moderation settings overview. Use the buttons below to toggle core features.');
+            }
+            if (choice === 'security') {
+                embed.setDescription('Security settings overview. Use the buttons below to toggle Anti-Nuke and review whitelist.');
+            }
+            if (choice === 'logging') {
+                embed.setDescription('Logging overview. Use `/mod-config logs` and `/security logs` to configure log channels.');
+            }
+
+            const components = SettingsCommand.buildSettingsComponents({ modSettings: cfgMod, secSettings: cfgSec });
+            return safeUpdate({ embeds: [embed], components });
+        }
         };
 
         try {
         if (interaction.isButton()) {
+            // --- 📚 HELP PANEL BUTTONS ---
+            if (interaction.customId && interaction.customId.startsWith('help_')) {
+                const page = interaction.customId.replace('help_', '') || 'home';
+                const embed = HelpCommand.buildHelpEmbed(page);
+                const components = HelpCommand.buildHelpComponents(page);
+                return safeUpdate({ embeds: [embed], components });
+            }
+
+            // --- ⚙️ SETTINGS PANEL BUTTONS (Admin only) ---
+            if (interaction.customId && interaction.customId.startsWith('settings_')) {
+                if (!interaction.guild) return safeReply({ content: 'This interaction can only be used in a server.', ephemeral: true });
+                if (!interaction.member?.permissions?.has(PermissionFlagsBits.Administrator)) {
+                    return safeReply({ content: '❌ Admin only.', ephemeral: true });
+                }
+
+                const cfgMod = await ModSettings.findOneAndUpdate(
+                    { guildId: interaction.guildId },
+                    { $setOnInsert: { guildId: interaction.guildId } },
+                    { upsert: true, new: true }
+                );
+                const cfgSec = await GuildSecurityConfig.findOneAndUpdate(
+                    { guildId: interaction.guildId },
+                    { $setOnInsert: { guildId: interaction.guildId } },
+                    { upsert: true, new: true }
+                );
+
+                if (interaction.customId === 'settings_toggle_mod') {
+                    cfgMod.enabled = !cfgMod.enabled;
+                    await cfgMod.save();
+                }
+
+                if (interaction.customId === 'settings_toggle_modemode') {
+                    cfgMod.mode = (cfgMod.mode || 'normal') === 'strict' ? 'normal' : 'strict';
+                    await cfgMod.save();
+                }
+
+                if (interaction.customId === 'settings_sens_up') {
+                    cfgMod.sensitivity = Math.min(5, Number(cfgMod.sensitivity || 3) + 1);
+                    await cfgMod.save();
+                }
+
+                if (interaction.customId === 'settings_sens_down') {
+                    cfgMod.sensitivity = Math.max(1, Number(cfgMod.sensitivity || 3) - 1);
+                    await cfgMod.save();
+                }
+
+                if (interaction.customId === 'settings_whitelist_role_add') {
+                    const modal = new ModalBuilder()
+                        .setCustomId('settings_modal_whitelist_role')
+                        .setTitle('Whitelist Role');
+
+                    const input = new TextInputBuilder()
+                        .setCustomId('role_id')
+                        .setLabel('Role ID')
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true)
+                        .setMaxLength(32);
+
+                    modal.addComponents(new ActionRowBuilder().addComponents(input));
+                    return interaction.showModal(modal);
+                }
+
+                if (interaction.customId === 'settings_whitelist_channel_add') {
+                    const modal = new ModalBuilder()
+                        .setCustomId('settings_modal_whitelist_channel')
+                        .setTitle('Whitelist Channel');
+
+                    const input = new TextInputBuilder()
+                        .setCustomId('channel_id')
+                        .setLabel('Channel ID')
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true)
+                        .setMaxLength(32);
+
+                    modal.addComponents(new ActionRowBuilder().addComponents(input));
+                    return interaction.showModal(modal);
+                }
+
+                if (interaction.customId === 'settings_toggle_antinuke') {
+                    cfgSec.antiNukeEnabled = !cfgSec.antiNukeEnabled;
+                    await cfgSec.save();
+                }
+
+                if (interaction.customId === 'settings_show_whitelist') {
+                    const users = (cfgSec.whitelistUsers || []).map(id => `<@${id}> (\`${id}\`)`).join('\n') || 'None';
+                    const roles = (cfgSec.whitelistRoles || []).map(id => `<@&${id}> (\`${id}\`)`).join('\n') || 'None';
+                    const embed = new EmbedBuilder()
+                        .setColor(THEME.COLORS.ACCENT)
+                        .setTitle('🛡️ Security Whitelist')
+                        .addFields(
+                            { name: 'Users', value: users, inline: false },
+                            { name: 'Roles', value: roles, inline: false }
+                        )
+                        .setFooter(THEME.FOOTER);
+                    return safeReply({ embeds: [embed], ephemeral: true });
+                }
+
+                const embed = SettingsCommand.buildSettingsEmbed({ guild: interaction.guild, modSettings: cfgMod, secSettings: cfgSec });
+                const components = SettingsCommand.buildSettingsComponents({ modSettings: cfgMod, secSettings: cfgSec });
+                return safeUpdate({ embeds: [embed], components });
+            }
+
             // --- 🧠 CUSTOM REPLIES DASHBOARD (Owner Only) ---
             if (interaction.customId === 'cr_add') {
                 const OWNER_ROLE_ID = '1461766723274412126';
