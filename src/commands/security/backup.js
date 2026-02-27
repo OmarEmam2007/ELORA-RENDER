@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const GuildBackup = require('../../models/GuildBackup');
 const { createBackup, restoreFromBackup } = require('../../services/guildBackupService');
-const { buildAssetAttachment } = require('../../utils/responseAssets');
+const { buildAssetAttachment, makeError, makeInfo, makeLoading, makeSecurity, makeSuccess, toReplyPayload } = require('../../utils/responseAssets');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -27,14 +27,14 @@ module.exports = {
 
     async execute(interaction, client) {
         if (!interaction.guild) {
-            const badAsset = buildAssetAttachment('wrong');
-            return interaction.reply({ content: '❌ This command can only be used in a server.', files: badAsset?.attachment ? [badAsset.attachment] : [], ephemeral: true });
+            const err = makeError({ title: 'Server Only', description: 'This command can only be used in a server.' });
+            return interaction.reply(toReplyPayload(err, { ephemeral: true }));
         }
 
         // Owner gate (extra safety)
         if (interaction.user.id !== client.config.ownerId) {
-            const secAsset = buildAssetAttachment('security');
-            return interaction.reply({ content: '❌ Only the Bot Owner can use this command.', files: secAsset?.attachment ? [secAsset.attachment] : [], ephemeral: true });
+            const sec = makeSecurity({ title: 'Owner Only', description: 'Only the Bot Owner can use this command.' });
+            return interaction.reply(toReplyPayload(sec, { ephemeral: true }));
         }
 
         const sub = interaction.options.getSubcommand();
@@ -43,10 +43,8 @@ module.exports = {
             await interaction.deferReply({ ephemeral: true });
             const note = interaction.options.getString('note') || null;
 
-            const loadingAsset = buildAssetAttachment('loading');
-            if (loadingAsset?.attachment) {
-                await interaction.editReply({ content: '⏳ Creating backup...', files: [loadingAsset.attachment] }).catch(() => { });
-            }
+            const loading = makeLoading({ title: 'Creating Backup', description: 'Saving roles, channels, and permissions...' });
+            await interaction.editReply(toReplyPayload(loading, { ephemeral: true })).catch(() => { });
 
             try {
                 const doc = await createBackup({
@@ -55,16 +53,15 @@ module.exports = {
                     note
                 });
 
-                const okAsset = buildAssetAttachment('security');
-
-                return interaction.editReply({
-                    content: `✅ Backup created.\nID: ${doc.id}\nCreatedAt: ${doc.createdAt.toISOString()}`,
-                    files: okAsset?.attachment ? [okAsset.attachment] : []
+                const done = makeSecurity({
+                    title: 'Backup Created',
+                    description: `ID: \`${doc.id}\`\nCreated: <t:${Math.floor(new Date(doc.createdAt).getTime() / 1000)}:R>${note ? `\nNote: ${note}` : ''}`
                 });
+                return interaction.editReply(toReplyPayload(done, { ephemeral: true }));
             } catch (e) {
                 console.error('[Backup] create error:', e);
-                const badAsset = buildAssetAttachment('wrong');
-                return interaction.editReply({ content: '❌ Failed to create backup (check bot permissions and logs).', files: badAsset?.attachment ? [badAsset.attachment] : [] });
+                const err = makeError({ title: 'Backup Failed', description: 'Failed to create backup. Check bot permissions and logs.' });
+                return interaction.editReply(toReplyPayload(err, { ephemeral: true }));
             }
         }
 
@@ -77,16 +74,18 @@ module.exports = {
                 .catch(() => []);
 
             if (!docs.length) {
-                const infoAsset = buildAssetAttachment('info');
-                return interaction.editReply({ content: 'No backups found for this server.', files: infoAsset?.attachment ? [infoAsset.attachment] : [] });
+                const info = makeInfo({ title: 'No Backups', description: 'No backups found for this server yet.' });
+                return interaction.editReply(toReplyPayload(info, { ephemeral: true }));
             }
 
-            const lines = docs.map(d => {
-                const note = d.note ? ` — ${d.note}` : '';
-                return `- ${d._id} — ${new Date(d.createdAt).toISOString()}${note}`;
+            const lines = docs.map((d, idx) => {
+                const ts = Math.floor(new Date(d.createdAt).getTime() / 1000);
+                const note = d.note ? `\nNote: ${d.note}` : '';
+                return `**${idx + 1}.** \`${d._id}\`\nCreated: <t:${ts}:R>${note}`;
             });
 
-            return interaction.editReply({ content: `Recent backups:\n${lines.join('\n')}` });
+            const info = makeInfo({ title: 'Recent Backups', description: lines.join('\n\n') });
+            return interaction.editReply(toReplyPayload(info, { ephemeral: true }));
         }
 
         if (sub === 'info') {
@@ -95,23 +94,23 @@ module.exports = {
 
             const doc = await GuildBackup.findOne({ _id: id, guildId: interaction.guild.id }).lean().catch(() => null);
             if (!doc) {
-                const badAsset = buildAssetAttachment('wrong');
-                return interaction.editReply({ content: '❌ Backup not found for this server.', files: badAsset?.attachment ? [badAsset.attachment] : [] });
+                const err = makeError({ title: 'Not Found', description: 'Backup not found for this server.' });
+                return interaction.editReply(toReplyPayload(err, { ephemeral: true }));
             }
 
             const rolesCount = Array.isArray(doc.snapshot?.roles) ? doc.snapshot.roles.length : 0;
             const channelsCount = Array.isArray(doc.snapshot?.channels) ? doc.snapshot.channels.length : 0;
-            const note = doc.note ? `\nNote: ${doc.note}` : '';
+            const ts = Math.floor(new Date(doc.createdAt).getTime() / 1000);
+            const desc = [
+                `ID: \`${doc._id}\``,
+                `Created: <t:${ts}:F>`,
+                `Roles: **${rolesCount}**`,
+                `Channels: **${channelsCount}**`,
+                doc.note ? `Note: ${doc.note}` : null
+            ].filter(Boolean).join('\n');
 
-            return interaction.editReply({
-                content:
-                    `Backup info:\n` +
-                    `ID: ${doc._id}\n` +
-                    `CreatedAt: ${new Date(doc.createdAt).toISOString()}\n` +
-                    `Roles: ${rolesCount}\n` +
-                    `Channels: ${channelsCount}` +
-                    note
-            });
+            const info = makeInfo({ title: 'Backup Info', description: desc });
+            return interaction.editReply(toReplyPayload(info, { ephemeral: true }));
         }
 
         if (sub === 'restore') {
@@ -119,8 +118,12 @@ module.exports = {
             const confirm = interaction.options.getString('confirm');
 
             if (confirm !== 'RESTORE') {
+                const err = makeError({ title: 'Confirmation Failed', description: 'Type `RESTORE` exactly to confirm.' });
+                // use cooldown thumbnail for a nicer look
                 const cdAsset = buildAssetAttachment('cooldown');
-                return interaction.reply({ content: '❌ Confirmation failed. Type RESTORE exactly.', files: cdAsset?.attachment ? [cdAsset.attachment] : [], ephemeral: true });
+                if (cdAsset?.url) err.embed.setThumbnail(cdAsset.url);
+                const files = cdAsset?.attachment ? [...(err.files || []), cdAsset.attachment] : (err.files || []);
+                return interaction.reply({ embeds: [err.embed], files, ephemeral: true });
             }
 
             await interaction.deferReply({ ephemeral: true });
@@ -128,19 +131,18 @@ module.exports = {
             try {
                 const doc = await GuildBackup.findOne({ _id: id, guildId: interaction.guild.id }).catch(() => null);
                 if (!doc) {
-                    const badAsset = buildAssetAttachment('wrong');
-                    return interaction.editReply({ content: '❌ Backup not found for this server.', files: badAsset?.attachment ? [badAsset.attachment] : [] });
+                    const err = makeError({ title: 'Not Found', description: 'Backup not found for this server.' });
+                    return interaction.editReply(toReplyPayload(err, { ephemeral: true }));
                 }
 
                 await restoreFromBackup({ guild: interaction.guild, backupDoc: doc });
 
-                const okAsset = buildAssetAttachment('unlock');
-
-                return interaction.editReply({ content: '✅ Restore completed (best-effort). Check roles/channels/permissions.', files: okAsset?.attachment ? [okAsset.attachment] : [] });
+                const done = makeSuccess({ title: 'Restore Completed', description: 'Restore completed (best-effort). Check roles, channels, and permissions.' , assetKey: 'unlock' });
+                return interaction.editReply(toReplyPayload(done, { ephemeral: true }));
             } catch (e) {
                 console.error('[Backup] restore error:', e);
-                const badAsset = buildAssetAttachment('wrong');
-                return interaction.editReply({ content: '❌ Restore failed (best-effort). Check bot permissions/hierarchy and logs.', files: badAsset?.attachment ? [badAsset.attachment] : [] });
+                const err = makeError({ title: 'Restore Failed', description: 'Restore failed (best-effort). Check bot permissions/hierarchy and logs.' });
+                return interaction.editReply(toReplyPayload(err, { ephemeral: true }));
             }
         }
 

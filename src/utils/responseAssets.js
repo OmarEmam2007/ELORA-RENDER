@@ -31,28 +31,61 @@ function buildAssetAttachment(key) {
     return { attachment, url: `attachment://${name}` };
 }
 
-function makeStatusEmbed({ title, description, variant = 'PRIMARY', assetKey = null } = {}) {
+function makeStatusEmbed({
+    title,
+    description,
+    variant = 'PRIMARY',
+    assetKey = null,
+    assetPlacement = 'image',
+    emoji = null,
+    author = 'Elora RENDER',
+    compact = false
+} = {}) {
     const embed = THEME.makeEmbed(EmbedBuilder, variant);
-    if (title) embed.setTitle(title);
-    if (description) embed.setDescription(description);
+
+    if (author) embed.setAuthor({ name: author });
+    if (title) embed.setTitle(`${emoji ? `${emoji} ` : ''}${title}`);
+
+    if (description) {
+        embed.setDescription(compact ? `${description}` : `${description}`);
+    }
 
     const asset = assetKey ? buildAssetAttachment(assetKey) : null;
-    if (asset?.url) embed.setImage(asset.url);
+    if (asset?.url) {
+        if (assetPlacement === 'thumbnail') embed.setThumbnail(asset.url);
+        else embed.setImage(asset.url);
+    }
 
     const files = asset?.attachment ? [asset.attachment] : [];
-    return { embed, files };
+    return { embed, files, asset };
 }
 
 function makeSuccess({ title = 'Success', description, assetKey = 'ok' } = {}) {
-    return makeStatusEmbed({ title, description, variant: 'SUCCESS', assetKey });
+    return makeStatusEmbed({ title, description, variant: 'SUCCESS', assetKey, emoji: '✅', author: 'Elora RENDER' });
 }
 
 function makeError({ title = 'Error', description, assetKey = 'wrong' } = {}) {
-    return makeStatusEmbed({ title, description, variant: 'ERROR', assetKey });
+    return makeStatusEmbed({ title, description, variant: 'ERROR', assetKey, emoji: '❌', author: 'Elora RENDER' });
 }
 
 function makeLoading({ title = 'Loading...', description, assetKey = 'loading' } = {}) {
-    return makeStatusEmbed({ title, description, variant: 'WARNING', assetKey });
+    return makeStatusEmbed({ title, description, variant: 'WARNING', assetKey, emoji: '⏳', author: 'Elora RENDER' });
+}
+
+function makeInfo({ title = 'Info', description, assetKey = 'info' } = {}) {
+    return makeStatusEmbed({ title, description, variant: 'PRIMARY', assetKey, emoji: 'ℹ️', author: 'Elora RENDER', assetPlacement: 'thumbnail' });
+}
+
+function makeCooldown({ title = 'Cooldown', description, assetKey = 'cooldown' } = {}) {
+    return makeStatusEmbed({ title, description, variant: 'WARNING', assetKey, emoji: '🕒', author: 'Elora RENDER', assetPlacement: 'thumbnail' });
+}
+
+function makeSecurity({ title = 'Security', description, assetKey = 'security' } = {}) {
+    return makeStatusEmbed({ title, description, variant: 'SECONDARY', assetKey, emoji: '🛡️', author: 'Elora RENDER', assetPlacement: 'thumbnail' });
+}
+
+function toReplyPayload({ embed, files }, { ephemeral = false } = {}) {
+    return { embeds: [embed], files: files || [], ephemeral };
 }
 
 module.exports = {
@@ -61,5 +94,9 @@ module.exports = {
     makeStatusEmbed,
     makeSuccess,
     makeError,
-    makeLoading
+    makeLoading,
+    makeInfo,
+    makeCooldown,
+    makeSecurity,
+    toReplyPayload
 };
