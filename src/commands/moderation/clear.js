@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const THEME = require('../../utils/theme');
+const { buildAssetAttachment } = require('../../utils/responseAssets');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -44,12 +45,15 @@ module.exports = {
             .setColor(THEME.COLORS.ACCENT)
             .setDescription('💥 **Preparing Vaporization Beam...**');
 
+        const loadingAsset = buildAssetAttachment('loading');
+        if (loadingAsset?.url) initEmbed.setImage(loadingAsset.url);
+
         let msg;
         if (isSlash) {
-            await interaction.reply({ embeds: [initEmbed], ephemeral: true }); // Ephemeral so we don't delete our own log immediately
+            await interaction.reply({ embeds: [initEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [], ephemeral: true }); // Ephemeral so we don't delete our own log immediately
             msg = interaction;
         } else {
-            msg = await interaction.reply({ embeds: [initEmbed] });
+            msg = await interaction.reply({ embeds: [initEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
         }
 
         await new Promise(r => setTimeout(r, 1000)); // Charge laser
@@ -81,19 +85,24 @@ module.exports = {
                 .setDescription(`💥 **Vaporized ${toDelete.size} messages**`)
                 .setTimestamp();
 
+            const okAsset = buildAssetAttachment('ok');
+            if (okAsset?.url) successEmbed.setImage(okAsset.url);
+
             if (isSlash) {
-                await interaction.editReply({ embeds: [successEmbed] });
+                await interaction.editReply({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
             } else {
                 // If prefix, rewrite the loading message to success, then delete it after 3s
-                await msg.edit({ embeds: [successEmbed] });
+                await msg.edit({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
                 setTimeout(() => msg.delete().catch(() => { }), 3000);
             }
 
         } catch (error) {
             console.error(error);
             const err = new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription('❌ **Error:** Messages too old or missing.');
-            if (isSlash) await interaction.editReply({ embeds: [err] });
-            else await msg.edit({ embeds: [err] });
+            const badAsset = buildAssetAttachment('wrong');
+            if (badAsset?.url) err.setImage(badAsset.url);
+            if (isSlash) await interaction.editReply({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [] });
+            else await msg.edit({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [] });
         }
     },
 };

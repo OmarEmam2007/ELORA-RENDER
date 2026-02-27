@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const THEME = require('../../utils/theme');
+const { buildAssetAttachment } = require('../../utils/responseAssets');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -48,7 +49,9 @@ module.exports = {
                     .setAuthor({ name: 'Access Denied', iconURL: THEME.ICONS.CROSS })
                     .setDescription(`**Target Shielded:** I cannot ban **${targetUser.tag}** (Higher or Equal Clearance).`)
                     .setFooter(THEME.FOOTER);
-                return interaction.reply({ embeds: [err], ephemeral: true });
+                const badAsset = buildAssetAttachment('wrong');
+                if (badAsset?.url) err.setImage(badAsset.url);
+                return interaction.reply({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [], ephemeral: true });
             }
         }
 
@@ -60,11 +63,14 @@ module.exports = {
             .setColor(THEME.COLORS.WARNING)
             .setDescription(`${frames[0]}`);
 
+        const loadingAsset = buildAssetAttachment('loading');
+        if (loadingAsset?.url) initialEmbed.setImage(loadingAsset.url);
+
         if (isSlash) {
-            await interaction.reply({ embeds: [initialEmbed] });
+            await interaction.reply({ embeds: [initialEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
             msg = interaction;
         } else {
-            msg = await interaction.reply({ embeds: [initialEmbed] });
+            msg = await interaction.reply({ embeds: [initialEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
         }
 
         // Play Animation
@@ -73,6 +79,8 @@ module.exports = {
             const updateEmbed = new EmbedBuilder()
                 .setColor(THEME.COLORS.WARNING)
                 .setDescription(`${frames[i]}`);
+
+            if (loadingAsset?.url) updateEmbed.setImage(loadingAsset.url);
 
             if (isSlash) await interaction.editReply({ embeds: [updateEmbed] });
             else await msg.edit({ embeds: [updateEmbed] });
@@ -111,8 +119,11 @@ module.exports = {
                 .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
                 .setTimestamp();
 
-            if (isSlash) await interaction.editReply({ embeds: [successEmbed] });
-            else await msg.edit({ embeds: [successEmbed] });
+            const okAsset = buildAssetAttachment('diamond');
+            if (okAsset?.url) successEmbed.setImage(okAsset.url);
+
+            if (isSlash) await interaction.editReply({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
+            else await msg.edit({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
 
         } catch (error) {
             console.error(error);
@@ -120,8 +131,11 @@ module.exports = {
                 .setColor(THEME.COLORS.ERROR)
                 .setDescription('❌ **Critical Failure:** Ejection system malfunction.');
 
-            if (isSlash) await interaction.editReply({ embeds: [errEmbed] });
-            else await msg.edit({ embeds: [errEmbed] });
+            const badAsset = buildAssetAttachment('wrong');
+            if (badAsset?.url) errEmbed.setImage(badAsset.url);
+
+            if (isSlash) await interaction.editReply({ embeds: [errEmbed], files: badAsset?.attachment ? [badAsset.attachment] : [] });
+            else await msg.edit({ embeds: [errEmbed], files: badAsset?.attachment ? [badAsset.attachment] : [] });
         }
     },
 };

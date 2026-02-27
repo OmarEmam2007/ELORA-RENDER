@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const THEME = require('../../utils/theme');
+const { buildAssetAttachment } = require('../../utils/responseAssets');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -41,7 +42,12 @@ module.exports = {
         }
 
         const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-        if (!member) return interaction.reply({ content: '❌ User not in server.', ephemeral: true });
+        if (!member) {
+            const err = new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription('❌ User is not in this server.');
+            const badAsset = buildAssetAttachment('wrong');
+            if (badAsset?.url) err.setImage(badAsset.url);
+            return interaction.reply({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [], ephemeral: true });
+        }
 
         const SPECIAL_EXECUTOR_ID = '1380794290350981130';
         const SPECIAL_TARGET_ID = '1258440001616744542';
@@ -49,7 +55,12 @@ module.exports = {
             return interaction.reply({ content: "AhMeD_kErA has complete control now, i can't kick him." });
         }
 
-        if (!member.moderatable) return interaction.reply({ content: '⛔ Cannot timeout this user (Higher Rank).', ephemeral: true });
+        if (!member.moderatable) {
+            const err = new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription('⛔ Cannot timeout this user (higher role / missing permissions).');
+            const badAsset = buildAssetAttachment('wrong');
+            if (badAsset?.url) err.setImage(badAsset.url);
+            return interaction.reply({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [], ephemeral: true });
+        }
 
         // --- 2. Animation ---
         const frames = [
@@ -62,16 +73,20 @@ module.exports = {
         let msg;
         const initEmbed = new EmbedBuilder().setColor(THEME.COLORS.ACCENT).setDescription(`${frames[0]}`);
 
+        const loadingAsset = buildAssetAttachment('loading');
+        if (loadingAsset?.url) initEmbed.setImage(loadingAsset.url);
+
         if (isSlash) {
-            await interaction.reply({ embeds: [initEmbed] });
+            await interaction.reply({ embeds: [initEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
             msg = interaction;
         } else {
-            msg = await interaction.reply({ embeds: [initEmbed] });
+            msg = await interaction.reply({ embeds: [initEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
         }
 
         for (let i = 1; i < frames.length; i++) {
             await new Promise(r => setTimeout(r, 600));
             const embed = new EmbedBuilder().setColor(THEME.COLORS.ACCENT).setDescription(`${frames[i]}`);
+            if (loadingAsset?.url) embed.setImage(loadingAsset.url);
             if (isSlash) await interaction.editReply({ embeds: [embed] });
             else await msg.edit({ embeds: [embed] });
         }
@@ -102,14 +117,19 @@ module.exports = {
                 .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
                 .setTimestamp();
 
-            if (isSlash) await interaction.editReply({ embeds: [successEmbed] });
-            else await msg.edit({ embeds: [successEmbed] });
+            const okAsset = buildAssetAttachment(duration >= 60 ? 'diamond' : 'ok');
+            if (okAsset?.url) successEmbed.setImage(okAsset.url);
+
+            if (isSlash) await interaction.editReply({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
+            else await msg.edit({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
 
         } catch (error) {
             console.error(error);
             const err = new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription('❌ Stasis field collapse (Error).');
-            if (isSlash) await interaction.editReply({ embeds: [err] });
-            else await msg.edit({ embeds: [err] });
+            const badAsset = buildAssetAttachment('wrong');
+            if (badAsset?.url) err.setImage(badAsset.url);
+            if (isSlash) await interaction.editReply({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [] });
+            else await msg.edit({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [] });
         }
     },
 };

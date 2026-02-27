@@ -32,6 +32,7 @@ module.exports = {
             } catch (_) {
                 return safeReply(payload);
             }
+        };
 
         // --- ⚙️ SETTINGS PANEL MODALS (Admin only) ---
         if (interaction.isModalSubmit() && (interaction.customId === 'settings_modal_whitelist_role' || interaction.customId === 'settings_modal_whitelist_channel')) {
@@ -127,7 +128,6 @@ module.exports = {
             const components = SettingsCommand.buildSettingsComponents({ modSettings: cfgMod, secSettings: cfgSec });
             return safeUpdate({ embeds: [embed], components });
         }
-        };
 
         try {
         if (interaction.isButton()) {

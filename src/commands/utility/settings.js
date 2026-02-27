@@ -36,18 +36,6 @@ function buildSettingsEmbed({ guild, modSettings, secSettings }) {
 }
 
 function buildSettingsComponents({ modSettings, secSettings }) {
-    const menu = new StringSelectMenuBuilder()
-        .setCustomId('settings_menu')
-        .setPlaceholder('Select a category...')
-        .addOptions(
-            { label: 'Overview', value: 'overview' },
-            { label: 'Moderation', value: 'moderation' },
-            { label: 'Security', value: 'security' },
-            { label: 'Logging', value: 'logging' }
-        );
-
-    const row1 = new ActionRowBuilder().addComponents(menu);
-
     const row2 = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId('settings_toggle_mod')
@@ -89,7 +77,7 @@ function buildSettingsComponents({ modSettings, secSettings }) {
             .setLabel('Show Whitelist')
     );
 
-    return [row1, row2, row3, row4];
+    return [row2, row3, row4];
 }
 
 module.exports = {

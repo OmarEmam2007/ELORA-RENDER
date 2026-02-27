@@ -1,4 +1,6 @@
-const { SlashCommandBuilder, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, ChannelType, EmbedBuilder } = require('discord.js');
+const THEME = require('../../utils/theme');
+const { buildAssetAttachment } = require('../../utils/responseAssets');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -14,11 +16,17 @@ module.exports = {
         const voiceChannel = interaction.member.voice.channel;
 
         if (!voiceChannel) {
-            return interaction.reply({ content: '❌ You must be in a voice channel!', ephemeral: true });
+            const err = new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription('❌ You must be in a voice channel.');
+            const badAsset = buildAssetAttachment('wrong');
+            if (badAsset?.url) err.setImage(badAsset.url);
+            return interaction.reply({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [], ephemeral: true });
         }
 
         if (voiceChannel.type === ChannelType.GuildStageVoice) {
-            return interaction.reply({ content: '❌ Stage channels are not supported. Use a normal voice channel.', ephemeral: true });
+            const err = new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription('❌ Stage channels are not supported. Use a normal voice channel.');
+            const badAsset = buildAssetAttachment('wrong');
+            if (badAsset?.url) err.setImage(badAsset.url);
+            return interaction.reply({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [], ephemeral: true });
         }
 
         const guildId = interaction.guild.id;
@@ -48,11 +56,19 @@ module.exports = {
         }
 
         if (!chosenBot || !chosenBot.music) {
-            return interaction.reply({ content: '❌ No available music bot right now.', ephemeral: true });
+            const err = new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription('❌ No available music bot right now.');
+            const badAsset = buildAssetAttachment('wrong');
+            if (badAsset?.url) err.setImage(badAsset.url);
+            return interaction.reply({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [], ephemeral: true });
         }
 
         await interaction.deferReply();
         try {
+            const loading = new EmbedBuilder().setColor(THEME.COLORS.WARNING).setDescription('⏳ Adding to queue...');
+            const loadingAsset = buildAssetAttachment('loading');
+            if (loadingAsset?.url) loading.setImage(loadingAsset.url);
+            await interaction.editReply({ embeds: [loading], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
+
             const track = await chosenBot.music.enqueueByIds({
                 guildId,
                 voiceChannelId: voiceChannel.id,
@@ -60,9 +76,18 @@ module.exports = {
                 userId: interaction.user.id,
                 query,
             });
-            await interaction.editReply(`✅ Added: **${track.title}** (${chosenBot.user.username})`);
+
+            const ok = new EmbedBuilder()
+                .setColor(THEME.COLORS.SUCCESS)
+                .setDescription(`✅ Added: **${track.title}**\n\nBot: **${chosenBot.user.username}**`);
+            const okAsset = buildAssetAttachment('ok');
+            if (okAsset?.url) ok.setImage(okAsset.url);
+            await interaction.editReply({ embeds: [ok], files: okAsset?.attachment ? [okAsset.attachment] : [] });
         } catch (e) {
-            await interaction.editReply(`❌ Error: ${e.message || e}`);
+            const err = new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription(`❌ Error: ${e.message || e}`);
+            const badAsset = buildAssetAttachment('wrong');
+            if (badAsset?.url) err.setImage(badAsset.url);
+            await interaction.editReply({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [] });
         }
     },
 };

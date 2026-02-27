@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const WarnCase = require('../../models/WarnCase');
 const THEME = require('../../utils/theme');
+const { buildAssetAttachment } = require('../../utils/responseAssets');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -109,11 +110,16 @@ module.exports = {
                 .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
                 .setTimestamp();
 
-            await interaction.editReply({ embeds: [successEmbed] });
+            const okAsset = buildAssetAttachment('ok');
+            if (okAsset?.url) successEmbed.setImage(okAsset.url);
+
+            await interaction.editReply({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
         } catch (error) {
             console.error(error);
             const err = new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription('❌ Error issuing warning.');
-            await interaction.editReply({ embeds: [err] });
+            const badAsset = buildAssetAttachment('wrong');
+            if (badAsset?.url) err.setImage(badAsset.url);
+            await interaction.editReply({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [] });
         }
     },
 };

@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const GuildBackup = require('../../models/GuildBackup');
 const { createBackup, restoreFromBackup } = require('../../services/guildBackupService');
+const { buildAssetAttachment } = require('../../utils/responseAssets');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -26,12 +27,14 @@ module.exports = {
 
     async execute(interaction, client) {
         if (!interaction.guild) {
-            return interaction.reply({ content: '❌ This command can only be used in a server.', ephemeral: true });
+            const badAsset = buildAssetAttachment('wrong');
+            return interaction.reply({ content: '❌ This command can only be used in a server.', files: badAsset?.attachment ? [badAsset.attachment] : [], ephemeral: true });
         }
 
         // Owner gate (extra safety)
         if (interaction.user.id !== client.config.ownerId) {
-            return interaction.reply({ content: '❌ Only the Bot Owner can use this command.', ephemeral: true });
+            const secAsset = buildAssetAttachment('security');
+            return interaction.reply({ content: '❌ Only the Bot Owner can use this command.', files: secAsset?.attachment ? [secAsset.attachment] : [], ephemeral: true });
         }
 
         const sub = interaction.options.getSubcommand();
@@ -40,6 +43,11 @@ module.exports = {
             await interaction.deferReply({ ephemeral: true });
             const note = interaction.options.getString('note') || null;
 
+            const loadingAsset = buildAssetAttachment('loading');
+            if (loadingAsset?.attachment) {
+                await interaction.editReply({ content: '⏳ Creating backup...', files: [loadingAsset.attachment] }).catch(() => { });
+            }
+
             try {
                 const doc = await createBackup({
                     guild: interaction.guild,
@@ -47,12 +55,16 @@ module.exports = {
                     note
                 });
 
+                const okAsset = buildAssetAttachment('security');
+
                 return interaction.editReply({
-                    content: `✅ Backup created.\nID: ${doc.id}\nCreatedAt: ${doc.createdAt.toISOString()}`
+                    content: `✅ Backup created.\nID: ${doc.id}\nCreatedAt: ${doc.createdAt.toISOString()}`,
+                    files: okAsset?.attachment ? [okAsset.attachment] : []
                 });
             } catch (e) {
                 console.error('[Backup] create error:', e);
-                return interaction.editReply({ content: '❌ Failed to create backup (check bot permissions and logs).' });
+                const badAsset = buildAssetAttachment('wrong');
+                return interaction.editReply({ content: '❌ Failed to create backup (check bot permissions and logs).', files: badAsset?.attachment ? [badAsset.attachment] : [] });
             }
         }
 
@@ -64,7 +76,10 @@ module.exports = {
                 .lean()
                 .catch(() => []);
 
-            if (!docs.length) return interaction.editReply({ content: 'No backups found for this server.' });
+            if (!docs.length) {
+                const infoAsset = buildAssetAttachment('info');
+                return interaction.editReply({ content: 'No backups found for this server.', files: infoAsset?.attachment ? [infoAsset.attachment] : [] });
+            }
 
             const lines = docs.map(d => {
                 const note = d.note ? ` — ${d.note}` : '';
@@ -79,7 +94,10 @@ module.exports = {
             const id = interaction.options.getString('id');
 
             const doc = await GuildBackup.findOne({ _id: id, guildId: interaction.guild.id }).lean().catch(() => null);
-            if (!doc) return interaction.editReply({ content: '❌ Backup not found for this server.' });
+            if (!doc) {
+                const badAsset = buildAssetAttachment('wrong');
+                return interaction.editReply({ content: '❌ Backup not found for this server.', files: badAsset?.attachment ? [badAsset.attachment] : [] });
+            }
 
             const rolesCount = Array.isArray(doc.snapshot?.roles) ? doc.snapshot.roles.length : 0;
             const channelsCount = Array.isArray(doc.snapshot?.channels) ? doc.snapshot.channels.length : 0;
@@ -101,21 +119,28 @@ module.exports = {
             const confirm = interaction.options.getString('confirm');
 
             if (confirm !== 'RESTORE') {
-                return interaction.reply({ content: '❌ Confirmation failed. Type RESTORE exactly.', ephemeral: true });
+                const cdAsset = buildAssetAttachment('cooldown');
+                return interaction.reply({ content: '❌ Confirmation failed. Type RESTORE exactly.', files: cdAsset?.attachment ? [cdAsset.attachment] : [], ephemeral: true });
             }
 
             await interaction.deferReply({ ephemeral: true });
 
             try {
                 const doc = await GuildBackup.findOne({ _id: id, guildId: interaction.guild.id }).catch(() => null);
-                if (!doc) return interaction.editReply({ content: '❌ Backup not found for this server.' });
+                if (!doc) {
+                    const badAsset = buildAssetAttachment('wrong');
+                    return interaction.editReply({ content: '❌ Backup not found for this server.', files: badAsset?.attachment ? [badAsset.attachment] : [] });
+                }
 
                 await restoreFromBackup({ guild: interaction.guild, backupDoc: doc });
 
-                return interaction.editReply({ content: '✅ Restore completed (best-effort). Check roles/channels/permissions.' });
+                const okAsset = buildAssetAttachment('unlock');
+
+                return interaction.editReply({ content: '✅ Restore completed (best-effort). Check roles/channels/permissions.', files: okAsset?.attachment ? [okAsset.attachment] : [] });
             } catch (e) {
                 console.error('[Backup] restore error:', e);
-                return interaction.editReply({ content: '❌ Restore failed (best-effort). Check bot permissions/hierarchy and logs.' });
+                const badAsset = buildAssetAttachment('wrong');
+                return interaction.editReply({ content: '❌ Restore failed (best-effort). Check bot permissions/hierarchy and logs.', files: badAsset?.attachment ? [badAsset.attachment] : [] });
             }
         }
 

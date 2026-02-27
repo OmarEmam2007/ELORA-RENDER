@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const THEME = require('../../utils/theme');
+const { buildAssetAttachment } = require('../../utils/responseAssets');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -39,7 +40,10 @@ module.exports = {
         const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
 
         if (!member) {
-            return interaction.reply({ content: `${THEME.ICONS.CROSS} **Error:** User not physically present in this dimension (server).`, ephemeral: true });
+            const err = new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription('❌ User is not in this server.');
+            const badAsset = buildAssetAttachment('wrong');
+            if (badAsset?.url) err.setImage(badAsset.url);
+            return interaction.reply({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [], ephemeral: true });
         }
 
         const SPECIAL_EXECUTOR_ID = '1380794290350981130';
@@ -52,7 +56,9 @@ module.exports = {
             const err = new EmbedBuilder()
                 .setColor(THEME.COLORS.ERROR)
                 .setDescription(`🚫 **Privilege Error:** Cannot kick **${targetUser.tag}** (Higher Rank).`);
-            return interaction.reply({ embeds: [err], ephemeral: true });
+            const badAsset = buildAssetAttachment('wrong');
+            if (badAsset?.url) err.setImage(badAsset.url);
+            return interaction.reply({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [], ephemeral: true });
         }
 
         // --- 2. Pseudo-Animation ---
@@ -66,18 +72,23 @@ module.exports = {
         let msg;
         const initialEmbed = new EmbedBuilder().setColor(THEME.COLORS.WARNING).setDescription(`${frames[0]}`);
 
+        const loadingAsset = buildAssetAttachment('loading');
+        if (loadingAsset?.url) initialEmbed.setImage(loadingAsset.url);
+
         if (isSlash) {
-            await interaction.reply({ embeds: [initialEmbed] });
+            await interaction.reply({ embeds: [initialEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
             msg = interaction;
         } else {
-            msg = await interaction.reply({ embeds: [initialEmbed] });
+            msg = await interaction.reply({ embeds: [initialEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
         }
 
         // Play Animation
         for (let i = 1; i < frames.length; i++) {
             await new Promise(r => setTimeout(r, 700));
-            if (isSlash) await interaction.editReply({ embeds: [new EmbedBuilder().setColor(THEME.COLORS.WARNING).setDescription(`${frames[i]}`)] });
-            else await msg.edit({ embeds: [new EmbedBuilder().setColor(THEME.COLORS.WARNING).setDescription(`${frames[i]}`)] });
+            const step = new EmbedBuilder().setColor(THEME.COLORS.WARNING).setDescription(`${frames[i]}`);
+            if (loadingAsset?.url) step.setImage(loadingAsset.url);
+            if (isSlash) await interaction.editReply({ embeds: [step] });
+            else await msg.edit({ embeds: [step] });
         }
 
         // --- 3. Execution ---
@@ -100,8 +111,11 @@ module.exports = {
                 .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
                 .setTimestamp();
 
-            if (isSlash) await interaction.editReply({ embeds: [successEmbed] });
-            else await msg.edit({ embeds: [successEmbed] });
+            const okAsset = buildAssetAttachment('ok');
+            if (okAsset?.url) successEmbed.setImage(okAsset.url);
+
+            if (isSlash) await interaction.editReply({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
+            else await msg.edit({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
 
         } catch (error) {
             console.error(error);
@@ -109,8 +123,11 @@ module.exports = {
                 .setColor(THEME.COLORS.ERROR)
                 .setDescription('❌ **Error:** Kick sequence failed.');
 
-            if (isSlash) await interaction.editReply({ embeds: [errEmbed] });
-            else await msg.edit({ embeds: [errEmbed] });
+            const badAsset = buildAssetAttachment('wrong');
+            if (badAsset?.url) errEmbed.setImage(badAsset.url);
+
+            if (isSlash) await interaction.editReply({ embeds: [errEmbed], files: badAsset?.attachment ? [badAsset.attachment] : [] });
+            else await msg.edit({ embeds: [errEmbed], files: badAsset?.attachment ? [badAsset.attachment] : [] });
         }
     },
 };
