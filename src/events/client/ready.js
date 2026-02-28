@@ -4,10 +4,11 @@ module.exports = {
     async execute(client) {
         console.log(`🤖 Logged in as ${client.user.tag}`);
 
-        if (!client.config.ownerId) {
+        const ownerId = client?.config?.ownerId || process.env.OWNER_ID;
+        if (!ownerId) {
             console.warn('⚠️ WARNING: Owner ID is not set in config.json! /panic and /blacklist will NOT work.');
         } else {
-            console.log(`👑 Owner ID detected: ${client.config.ownerId}`);
+            console.log(`👑 Owner ID detected: ${ownerId}`);
         }
 
         const { ActivityType } = require('discord.js');

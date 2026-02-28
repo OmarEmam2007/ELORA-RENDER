@@ -57,6 +57,12 @@ async function loadCommands(client) {
 
     client.on('ready', async () => {
         try {
+            // Only the main bot should register slash commands.
+            // Clones may not have config/application initialized the same way and can crash here.
+            if (!client?.config) {
+                return;
+            }
+
             // Allow overriding guildId from environment (e.g. Hugging Face secrets)
             const envGuildId = process.env.GUILD_ID;
             const guildId = envGuildId || client.config.guildId;
