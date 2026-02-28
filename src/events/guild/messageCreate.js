@@ -3,13 +3,8 @@ const { checkLink, checkRateLimit } = require('../../utils/securityUtils');
 const User = require('../../models/User');
 const ModSettings = require('../../models/ModSettings');
 const ModLog = require('../../models/ModLog');
-const Bump = require('../../models/Bump');
-const { analyzeMessage, detectProfanitySmart } = require('../../utils/moderation/coreDetector');
-const { createLogEmbed } = require('../../utils/moderation/modernLogger');
-const { logDetection } = require('../../utils/moderation/patternLearner');
-const CustomReply = require('../../models/CustomReply');
+const { detectProfanitySmart } = require('../../utils/moderation/coreDetector');
 const THEME = require('../../utils/theme');
-const heistCommand = require('../../commands/economy/heist');
 const { getGuildLogChannel } = require('../../utils/getGuildLogChannel');
 
 // Global buffer initialization (if not exists)
@@ -18,72 +13,57 @@ if (!global.messageBuffer) global.messageBuffer = [];
 // Smart Anti-Swearing: warnings tracker
 if (!global.antiSwearWarnings) global.antiSwearWarnings = new Map();
 
-// Module load marker (helps confirm the correct file is loaded in production)
-console.log('✅ [Events] Loaded guild/messageCreate.js');
-
 module.exports = {
     name: 'messageCreate',
     async execute(message, client) {
         if (message.author.bot || !message.guild) return;
 
         const ANTISWEAR_DEBUG = process.env.ANTISWEAR_DEBUG === '1';
-        if (ANTISWEAR_DEBUG) {
-            console.log(
-                `[ANTISWEAR] fired guild=${message.guild.id} channel=${message.channelId} author=${message.author.id} ` +
-                `partial=${Boolean(message.partial)} contentLen=${String(message.content || '').length}`
-            );
-        }
 
-        // --- 🤖 Smart Anti-Swearing (EN/AR/EGY + Franco) ---
-        let modSettings = null;
+        // --- 🤖 Smart Anti-Swearing (PRIORITY #1) ---
         try {
-            modSettings = await ModSettings.findOne({ guildId: message.guild.id }).catch(() => null);
-        } catch (e) {
-            modSettings = null;
-        }
+            // Fetch modSettings for thresholds and whitelists
+            const modSettings = await ModSettings.findOne({ guildId: message.guild.id }).catch(() => null);
+            
+            // Bypass logic: ignore Server Owner and Administrators
+            const isServerOwner = message.guild?.ownerId === message.author.id;
+            const isAdministrator = message.member?.permissions?.has(PermissionFlagsBits.Administrator);
+            
+            const whitelistRoles = Array.isArray(modSettings?.whitelistRoles) ? modSettings.whitelistRoles : [];
+            const whitelistChannels = Array.isArray(modSettings?.whitelistChannels) ? modSettings.whitelistChannels : [];
+            const isWhitelisted = Boolean(
+                (message.channelId && whitelistChannels.includes(message.channelId)) ||
+                (message.member?.roles?.cache && whitelistRoles.some(r => message.member.roles.cache.has(r)))
+            );
 
-        const isModLiteEnabled = modSettings?.enabled !== false;
-        const whitelistRoles = Array.isArray(modSettings?.whitelistRoles) ? modSettings.whitelistRoles : [];
-        const whitelistChannels = Array.isArray(modSettings?.whitelistChannels) ? modSettings.whitelistChannels : [];
-        const isWhitelisted = Boolean(
-            (message.channelId && whitelistChannels.includes(message.channelId)) ||
-            (message.member?.roles?.cache && whitelistRoles.some(r => message.member.roles.cache.has(r)))
-        );
-
-        const isServerOwner = message.guild?.ownerId && message.author.id === message.guild.ownerId;
-        const isAdministrator = Boolean(message.member?.permissions?.has(PermissionFlagsBits.Administrator));
-
-        const shouldApplyAntiSwear = isModLiteEnabled && !isWhitelisted && !isServerOwner && !isAdministrator;
-
-        if (ANTISWEAR_DEBUG) {
-            console.log('[ANTISWEAR] gates=', {
-                enabled: isModLiteEnabled,
-                isWhitelisted,
-                isServerOwner,
-                isAdministrator,
-                shouldApplyAntiSwear,
-                threshold: Number(modSettings?.antiSwearThreshold || 5),
-                whitelistCount: Array.isArray(modSettings?.antiSwearWhitelist) ? modSettings.antiSwearWhitelist.length : 0,
-                customBlacklistCount: Array.isArray(modSettings?.customBlacklist) ? modSettings.customBlacklist.length : 0,
-            });
-        }
-
-        if (shouldApplyAntiSwear) {
-            try {
+            // ONLY apply if not Owner, not Admin, and not Whitelisted
+            if (!isServerOwner && !isAdministrator && !isWhitelisted) {
+                // Hardcoded common terms + DB custom terms
+                const hardcodedBlacklist = ['احا', 'a7a', 'كسمك', 'nigger', 'niga', 'fuck', 'shit'];
+                const customBlacklist = Array.isArray(modSettings?.customBlacklist) ? modSettings.customBlacklist : [];
+                
                 const detection = detectProfanitySmart(message.content, {
-                    extraTerms: Array.isArray(modSettings?.customBlacklist) ? modSettings.customBlacklist : [],
+                    extraTerms: [...hardcodedBlacklist, ...customBlacklist],
                     whitelist: Array.isArray(modSettings?.antiSwearWhitelist) ? modSettings.antiSwearWhitelist : []
                 });
 
-                if (ANTISWEAR_DEBUG) console.log('[ANTISWEAR] detection=', detection);
+                if (ANTISWEAR_DEBUG) {
+                    console.log(`[ANTISWEAR] Checking: "${message.content}" | Violation: ${detection.isViolation}`);
+                }
 
                 if (detection?.isViolation) {
-                    const threshold = Math.max(2, Math.min(20, Number(modSettings?.antiSwearThreshold || 5)));
+                    const threshold = modSettings?.antiSwearThreshold ? Math.max(2, Math.min(20, Number(modSettings.antiSwearThreshold))) : 5;
 
-                    await message.delete().catch((e) => {
-                        if (ANTISWEAR_DEBUG) console.log('[ANTISWEAR] delete failed:', e?.message || e);
-                    });
+                    // 1) Delete message
+                    await message.delete().catch(() => {});
 
+                    // Send a temporary public warning
+                    const publicWarn = await message.channel.send(`⚠️ ${message.author}, ممنوع الشتائم في هذا السيرفر!`).catch(() => null);
+                    if (publicWarn) {
+                        setTimeout(() => publicWarn.delete().catch(() => {}), 5000);
+                    }
+
+                    // 2) Track warnings
                     const key = `${message.guild.id}:${message.author.id}`;
                     let userProfile = await User.findOne({ userId: message.author.id, guildId: message.guild.id }).catch(() => null);
                     if (!userProfile) userProfile = new User({ userId: message.author.id, guildId: message.guild.id });
@@ -95,11 +75,11 @@ module.exports = {
                     await userProfile.save().catch(() => { });
                     global.antiSwearWarnings.set(key, { count: nextCount, lastAt: Date.now() });
 
-                    const warnText =
-                        `Your message was removed because it contained prohibited language.\n` +
-                        `Warning: ${nextCount}/${threshold}. If you reach ${threshold} warnings, you will be timed out for 1 hour.`;
+                    // 3) DM user
+                    const warnText = `Your message was removed because it contained prohibited language.\nWarning: ${nextCount}/${threshold}. If you reach ${threshold} warnings, you will be timed out for 1 hour.`;
                     await message.author.send(warnText).catch(() => { });
 
+                    // 4) Log to log channel
                     const logChannel = await getGuildLogChannel(message.guild, client);
                     if (logChannel) {
                         const embed = new EmbedBuilder()
@@ -117,6 +97,7 @@ module.exports = {
                         await logChannel.send({ embeds: [embed] }).catch(() => { });
                     }
 
+                    // 5) Auto punish at threshold
                     if (nextCount >= threshold) {
                         if (message.member?.moderatable) {
                             await message.member.timeout(60 * 60 * 1000, `Smart Anti-Swearing: ${threshold} warnings`).catch(() => { });
@@ -129,11 +110,17 @@ module.exports = {
                         global.antiSwearWarnings.set(key, { count: 0, lastAt: Date.now() });
                     }
 
-                    return;
+                    return; // Stop processing if it's a violation
                 }
-            } catch (e) {
-                console.error('[ANTISWEAR] error:', e);
             }
+        } catch (e) {
+            console.error('[ANTISWEAR] Priority check error:', e);
+        }
+
+        // --- 🧪 Debug Test Command ---
+        if (message.content === '!test') {
+            const contentAvailable = message.content.length > 0;
+            return message.reply(`✅ **Elora Debug Mode**\n- Content Length: \`${message.content.length}\`\n- Content Available: \`${contentAvailable}\`\n- Intents Status: ${contentAvailable ? 'OK' : 'FAIL'}`);
         }
 
         // --- Sovereign Nexus: The Hallucination Buffer ---
