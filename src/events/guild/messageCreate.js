@@ -152,5 +152,23 @@ module.exports = {
         } catch (e) {
             console.error('[MODERATION] Error:', e);
         }
+
+        // --- ⌨️ Command Handling (Prefix Commands) ---
+        const prefix = client.config.prefix;
+        if (!message.content.startsWith(prefix)) return;
+
+        const args = message.content.slice(prefix.length).trim().split(/ +/);
+        const commandName = args.shift().toLowerCase();
+
+        const command = client.commands.get(commandName) || client.commands.find(cmd => cmd.aliases && cmd.aliases.includes(commandName));
+
+        if (!command) return;
+
+        try {
+            await command.execute(message, args, client);
+        } catch (error) {
+            console.error(error);
+            message.reply('There was an error trying to execute that command!');
+        }
     }
 };
