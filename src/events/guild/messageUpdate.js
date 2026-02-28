@@ -3,7 +3,7 @@ const { getGuildLogChannel } = require('../../utils/getGuildLogChannel');
 const ModSettings = require('../../models/ModSettings');
 const User = require('../../models/User');
 const THEME = require('../../utils/theme');
-const { detectProfanitySmart } = require('../../utils/moderation/coreDetector');
+const { detectProfanitySmart, detectProfanityAI } = require('../../utils/moderation/coreDetector');
 
 module.exports = {
     name: 'messageUpdate',
@@ -41,7 +41,11 @@ module.exports = {
                 modSettings = null;
             }
 
-            const isModLiteEnabled = modSettings?.enabled !== false;
+            const antiSwearEnabled = modSettings?.antiSwearEnabled !== false;
+            if (!antiSwearEnabled) return;
+
+            // Anti-swear is independent from other moderation toggles.
+            const isModLiteEnabled = true;
             const whitelistRoles = Array.isArray(modSettings?.whitelistRoles) ? modSettings.whitelistRoles : [];
             const whitelistChannels = Array.isArray(modSettings?.whitelistChannels) ? modSettings.whitelistChannels : [];
 
@@ -67,12 +71,13 @@ module.exports = {
 
             if (shouldApplyAntiSwear) {
                 if (!newContent) return;
-                const detection = detectProfanitySmart(newContent, {
+                const detector = typeof detectProfanityAI === 'function' ? detectProfanityAI : async (c, o) => detectProfanitySmart(c, o);
+                const detection = await detector(newContent, {
                     extraTerms: Array.isArray(modSettings?.customBlacklist) ? modSettings.customBlacklist : [],
                     whitelist: Array.isArray(modSettings?.antiSwearWhitelist) ? modSettings.antiSwearWhitelist : []
                 });
 
-                if (ANTISWEAR_DEBUG) console.log('[ANTISWEAR][EDIT] detection=', detection);
+                if (ANTISWEAR_DEBUG) console.log('[ANTISWEAR][EDIT] detection=', { isViolation: detection?.isViolation, source: detection?.source, ai: detection?.ai ? { ok: detection.ai.ok, confidence: detection.ai.confidence, reason: detection.ai.reason } : undefined });
 
                 if (detection?.isViolation) {
                     const threshold = Math.max(2, Math.min(20, Number(modSettings?.antiSwearThreshold || 5)));

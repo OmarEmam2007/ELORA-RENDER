@@ -3,7 +3,7 @@ const { checkLink, checkRateLimit } = require('../../utils/securityUtils');
 const User = require('../../models/User');
 const ModSettings = require('../../models/ModSettings');
 const ModLog = require('../../models/ModLog');
-const { detectProfanitySmart } = require('../../utils/moderation/coreDetector');
+const { detectProfanitySmart, detectProfanityHybrid, detectProfanityAI } = require('../../utils/moderation/coreDetector');
 const THEME = require('../../utils/theme');
 const { getGuildLogChannel } = require('../../utils/getGuildLogChannel');
 const { handlePrefixCommand } = require('../../handlers/prefixCommandHandler');
@@ -25,6 +25,10 @@ module.exports = {
         try {
             // Fetch modSettings for thresholds and whitelists
             const modSettings = await ModSettings.findOne({ guildId: message.guild.id }).catch(() => null);
+
+            // Anti-swear switch (independent from other moderation). Default ON.
+            const antiSwearEnabled = modSettings?.antiSwearEnabled !== false;
+            if (!antiSwearEnabled) return;
             
             // Bypass logic: ignore Server Owner and Administrators
             const isServerOwner = message.guild?.ownerId === message.author.id;
@@ -43,13 +47,17 @@ module.exports = {
                 const hardcodedBlacklist = ['احا', 'a7a', 'كسمك', 'nigger', 'niga', 'fuck', 'shit'];
                 const customBlacklist = Array.isArray(modSettings?.customBlacklist) ? modSettings.customBlacklist : [];
                 
-                const detection = detectProfanitySmart(message.content, {
+                const detector = typeof detectProfanityAI === 'function'
+                    ? detectProfanityAI
+                    : (typeof detectProfanityHybrid === 'function' ? detectProfanityHybrid : async (c, o) => detectProfanitySmart(c, o));
+
+                const detection = await detector(message.content, {
                     extraTerms: [...hardcodedBlacklist, ...customBlacklist],
                     whitelist: Array.isArray(modSettings?.antiSwearWhitelist) ? modSettings.antiSwearWhitelist : []
                 });
 
                 if (ANTISWEAR_DEBUG) {
-                    console.log(`[ANTISWEAR] Checking: "${message.content}" | Violation: ${detection.isViolation}`);
+                    console.log(`[ANTISWEAR] Checking: "${message.content}" | Violation: ${detection.isViolation} | source=${detection.source || 'rules'}`);
                 }
 
                 if (detection?.isViolation) {
