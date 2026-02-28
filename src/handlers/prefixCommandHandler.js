@@ -68,6 +68,8 @@ async function handlePrefixCommand(message, client) {
     const text = String(message.content || '').trim();
     if (!text) return;
 
+    const PREFIX_DEBUG = process.env.PREFIX_DEBUG === '1';
+
     // Main prefix style: "elora <command> ..."
     const eloraPrefix = /^elora\s+/i;
     const legacyPrefix = client?.config?.prefix ? String(client.config.prefix) : null;
@@ -91,7 +93,21 @@ async function handlePrefixCommand(message, client) {
     if (!cmd || typeof cmd.execute !== 'function') return;
 
     try {
-        await cmd.execute(message, client, args);
+        if (PREFIX_DEBUG) {
+            console.log(`[PREFIX] command=${commandName} args=${JSON.stringify(args)} fileExecuteLen=${cmd.execute.length}`);
+        }
+
+        // Compatibility: some modules use execute(message, client, args), others use execute(message, args, client)
+        // Prefer the newer handler contract first.
+        try {
+            await cmd.execute(message, client, args);
+        } catch (e) {
+            // If the command expected (message, args, client) it will often throw when treating client as args.
+            if (PREFIX_DEBUG) {
+                console.warn(`[PREFIX] retrying signature for ${commandName} due to error:`, e?.message || e);
+            }
+            await cmd.execute(message, args, client);
+        }
     } catch (e) {
         console.error(`[PREFIX] Failed executing ${commandName}:`, e);
     }
