@@ -98,9 +98,17 @@ async function handlePrefixCommand(message, client) {
     if (!commandName) return;
 
     // Built-in minimal healthcheck command (does not depend on external command modules)
-    if (commandName === 'ping') {
+    if (commandName === 'ping' || commandName === 'p') {
         try {
-            return await message.reply('pong');
+            return await message.reply('pong 🏓');
+        } catch (_) {
+            return;
+        }
+    }
+
+    if (commandName === 'debug') {
+        try {
+            return await message.reply(`✅ **Prefix Handler Active**\n- Bot: ${client.user.tag}\n- Commands Loaded: ${client.prefixCommands.size}`);
         } catch (_) {
             return;
         }
