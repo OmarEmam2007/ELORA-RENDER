@@ -22,22 +22,121 @@ if (!global.antiSwearWarnings) global.antiSwearWarnings = new Map();
 module.exports = {
     name: 'messageCreate',
     async execute(message, client) {
+        if (message.author.bot || !message.guild) return;
+
+        const ANTISWEAR_DEBUG = process.env.ANTISWEAR_DEBUG === '1';
+
+        // --- 🤖 Smart Anti-Swearing (PRIORITY #1) ---
+        try {
+            let modSettings = await ModSettings.findOne({ guildId: message.guild.id }).catch(() => null);
+            const isModLiteEnabled = modSettings?.enabled !== false;
+            
+            const whitelistRoles = Array.isArray(modSettings?.whitelistRoles) ? modSettings.whitelistRoles : [];
+            const whitelistChannels = Array.isArray(modSettings?.whitelistChannels) ? modSettings.whitelistChannels : [];
+            const isWhitelisted = Boolean(
+                (message.channelId && whitelistChannels.includes(message.channelId)) ||
+                (message.member?.roles?.cache && whitelistRoles.some(r => message.member.roles.cache.has(r)))
+            );
+
+            if (isModLiteEnabled && !isWhitelisted) {
+                const detection = detectProfanitySmart(message.content, {
+                    extraTerms: Array.isArray(modSettings?.customBlacklist) ? modSettings.customBlacklist : [],
+                    whitelist: Array.isArray(modSettings?.antiSwearWhitelist) ? modSettings.antiSwearWhitelist : []
+                });
+
+                if (ANTISWEAR_DEBUG) {
+                    console.log(`[ANTISWEAR] Content: "${message.content}" | Violation: ${detection.isViolation}`);
+                }
+
+                if (detection?.isViolation) {
+                    const threshold = Math.max(2, Math.min(20, Number(modSettings?.antiSwearThreshold || 5)));
+
+                    // 1) Delete message
+                    await message.delete().catch((e) => {
+                        if (ANTISWEAR_DEBUG) console.log('[ANTISWEAR] delete failed:', e?.message || e);
+                    });
+
+                    // Send a temporary public warning
+                    const publicWarn = await message.channel.send(`⚠️ ${message.author}, ممنوع الشتائم في هذا السيرفر!`).catch(() => null);
+                    if (publicWarn) {
+                        setTimeout(() => publicWarn.delete().catch(() => {}), 5000);
+                    }
+
+                    // 2) Track warnings (MongoDB persistence via User model)
+                    const key = `${message.guild.id}:${message.author.id}`;
+                    let userProfile = await User.findOne({ userId: message.author.id, guildId: message.guild.id }).catch(() => null);
+                    if (!userProfile) userProfile = new User({ userId: message.author.id, guildId: message.guild.id });
+
+                    const prevCount = Number(userProfile.antiSwearWarningsCount || 0);
+                    const nextCount = Math.min(threshold, prevCount + 1);
+                    userProfile.antiSwearWarningsCount = nextCount;
+                    userProfile.antiSwearLastAt = new Date();
+                    await userProfile.save().catch(() => { });
+                    global.antiSwearWarnings.set(key, { count: nextCount, lastAt: Date.now() });
+
+                    // 3) DM user
+                    const warnText =
+                        `Your message was removed because it contained prohibited language.\n` +
+                        `Warning: ${nextCount}/${threshold}. If you reach ${threshold} warnings, you will be timed out for 1 hour.`;
+                    await message.author.send(warnText).catch(() => { });
+
+                    // 4) Log to log channel
+                    const logChannel = await getGuildLogChannel(message.guild, client);
+                    if (logChannel) {
+                        const embed = new EmbedBuilder()
+                            .setColor(THEME.COLORS.ERROR)
+                            .setTitle('Smart Anti-Swearing')
+                            .setDescription('Blocked a message containing prohibited language.')
+                            .addFields(
+                                { name: 'User', value: `${message.author.tag} (\`${message.author.id}\`)`, inline: true },
+                                { name: 'Channel', value: `${message.channel} (\`${message.channelId}\`)`, inline: true },
+                                { name: 'Warnings', value: `\`${nextCount}/${threshold}\``, inline: true },
+                                { name: 'Detected', value: `\`${(detection.matches || []).slice(0, 10).join(', ') || 'n/a'}\``, inline: false },
+                                { name: 'Message', value: `\`\`\`${String(message.content || '').slice(0, 900)}\`\`\``, inline: false }
+                            )
+                            .setTimestamp();
+                        await logChannel.send({ embeds: [embed] }).catch(() => { });
+                    }
+
+                    // 5) Auto punish at threshold
+                    if (nextCount >= threshold) {
+                        if (message.member?.moderatable) {
+                            await message.member.timeout(60 * 60 * 1000, `Smart Anti-Swearing: ${threshold} warnings`).catch(() => { });
+                        }
+                        // Reset in DB + cache
+                        await User.findOneAndUpdate(
+                            { userId: message.author.id, guildId: message.guild.id },
+                            { antiSwearWarningsCount: 0, antiSwearLastAt: new Date() },
+                            { upsert: true }
+                        ).catch(() => { });
+                        global.antiSwearWarnings.set(key, { count: 0, lastAt: Date.now() });
+
+                        const logChannel2 = await getGuildLogChannel(message.guild, client);
+                        if (logChannel2) {
+                            const embed2 = new EmbedBuilder()
+                                .setColor(THEME.COLORS.WARNING)
+                                .setTitle('Smart Anti-Swearing')
+                                .setDescription(`User reached ${threshold} warnings. Applied a 1-hour timeout (best-effort).`)
+                                .addFields(
+                                    { name: 'User', value: `${message.author.tag} (\`${message.author.id}\`)`, inline: true },
+                                    { name: 'Action', value: message.member?.moderatable ? 'Timeout (1 hour)' : 'Timeout failed (not moderatable)', inline: true }
+                                )
+                                .setTimestamp();
+                            await logChannel2.send({ embeds: [embed2] }).catch(() => { });
+                        }
+                    }
+
+                    return; // Stop processing if it's a violation
+                }
+            }
+        } catch (e) {
+            if (ANTISWEAR_DEBUG) console.error('[ANTISWEAR] Priority check error:', e);
+        }
+
         // --- 🧪 Debug Test Command ---
         if (message.content === '!test') {
             const contentAvailable = message.content.length > 0;
             return message.reply(`✅ **Elora Debug Mode**\n- Content Length: \`${message.content.length}\`\n- Content Available: \`${contentAvailable}\`\n- Intents Status: ${contentAvailable ? 'OK' : 'FAIL (Enable Message Content Intent!)'}`);
-        }
-
-        // Log for debugging event firing
-        if (process.env.ANTISWEAR_DEBUG === '1') {
-            console.log(`[ANTISWEAR] messageCreate fired: "${message.content}"`);
-        }
-
-        if (message.author.bot || !message.guild) return;
-
-        const ANTISWEAR_DEBUG = process.env.ANTISWEAR_DEBUG === '1';
-        if (ANTISWEAR_DEBUG) {
-            console.log(`[ANTISWEAR] messageCreate fired guild=${message.guild.id} channel=${message.channelId} author=${message.author.id}`);
         }
 
         const OMAR_ROLE_ID = '1461766723274412126';
@@ -46,8 +145,6 @@ module.exports = {
         const text = message.content?.trim() || '';
         const mentionsThisBot = message.mentions.has(client.user);
         const saysILoveYou = /i\s+love\s+you/i.test(text);
-
-        console.log(`[DEBUG] msg="${text}" | mentionsBot=${mentionsThisBot} | saysILoveYou=${saysILoveYou}`);
 
         if (mentionsThisBot && saysILoveYou) {
             const isOmar = message.member?.roles?.cache?.has(OMAR_ROLE_ID);
@@ -63,8 +160,6 @@ module.exports = {
             return;
         }
 
-        // Smart Anti-Swearing is implemented below using detectProfanitySmart (active).
-
         // --- Sovereign Nexus: The Hallucination Buffer ---
         if (message.content && message.content.length > 3) {
             const entry = `${message.author.username}: ${message.content}`;
@@ -73,11 +168,7 @@ module.exports = {
             if (global.messageBuffer.length > 50) global.messageBuffer.shift();
         }
 
-        // Prefix check moved to end to allow passive systems (Link/Anti-Virus) to work globally
-        // if (!message.content.startsWith(client.config.prefix)) return;
-
-        // --- 🛡️ Lightweight Moderation (Normal/Strict) ---
-        // English-only for all new moderation outputs.
+        // --- 🛡️ Lightweight Moderation (Anti-Invite, etc.) ---
         let modSettings = null;
         try {
             modSettings = await ModSettings.findOne({ guildId: message.guild.id }).catch(() => null);
@@ -96,37 +187,10 @@ module.exports = {
             (message.member?.roles?.cache && whitelistRoles.some(r => message.member.roles.cache.has(r)))
         );
 
-        // Note: do NOT bypass anti-swearing for ManageMessages/ManageGuild.
-        // Only Server Owner and Administrators are ignored.
-
+        const shouldApplyModLite = isModLiteEnabled && !isWhitelisted;
         const isServerOwner = message.guild?.ownerId && message.author.id === message.guild.ownerId;
         const isAdministrator = Boolean(message.member?.permissions?.has(PermissionFlagsBits.Administrator));
 
-        // Defaults tuned for NORMAL.
-        const sensitivity = Math.max(1, Math.min(5, Number(modSettings?.sensitivity || 3)));
-        const spamWindowMs = modLiteMode === 'strict' ? 6000 : 5000;
-        const spamLimit = modLiteMode === 'strict' ? (6 - sensitivity) : (7 - sensitivity);
-        const timeoutSeconds = modLiteMode === 'strict' ? 120 : 60;
-
-        const shouldApplyModLite = isModLiteEnabled && !isWhitelisted;
-
-        // Anti-swear bypass: DISABLED FOR TESTING (Triggers for everyone including Owner/Admin)
-        const shouldApplyAntiSwear = shouldApplyModLite;
-
-        // --- 🤖 Smart Anti-Swearing (EN/AR/EGY + Franco) ---
-        // False-positive safe: boundary-aware matching after normalization.
-        // Action: delete, DM warning count, log, timeout at threshold.
-        if (shouldApplyAntiSwear) {
-            try {
-                if (message.author.bot) return;
-                const detection = detectProfanitySmart(message.content, {
-                    extraTerms: Array.isArray(modSettings?.customBlacklist) ? modSettings.customBlacklist : [],
-                    whitelist: Array.isArray(modSettings?.antiSwearWhitelist) ? modSettings.antiSwearWhitelist : []
-                });
-                if (ANTISWEAR_DEBUG) {
-                    console.log('[ANTISWEAR] detection=', detection);
-                }
-                if (detection?.isViolation) {
                     const threshold = Math.max(2, Math.min(20, Number(modSettings?.antiSwearThreshold || 5)));
 
                     // 1) Delete message
