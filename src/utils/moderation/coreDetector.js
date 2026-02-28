@@ -11,25 +11,93 @@ const model = genAI ? genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' }
 function normalizeText(text) {
     if (!text) return '';
 
-    // 1. Convert to lowercase
-    let normalized = text.toLowerCase();
+    // 1) Convert to lowercase
+    let normalized = String(text).toLowerCase();
 
-    // 2. Remove Zalgo and weird characters (keep basic punctuation and spaces)
-    normalized = normalized.replace(/[^\w\s\u0621-\u064A]/gi, '');
+    // 2) Normalize common "Franco-Arabic" numerals
+    // Keep both original and converted forms later via detectProfanitySmart; here we convert into letters.
+    normalized = normalized
+        .replace(/2/g, 'ء')
+        .replace(/3/g, 'ع')
+        .replace(/4/g, 'ش')
+        .replace(/5/g, 'خ')
+        .replace(/6/g, 'ط')
+        .replace(/7/g, 'ح')
+        .replace(/8/g, 'ق')
+        .replace(/9/g, 'ص');
 
-    // 3. Normalize Arabic characters (Alef, Yeh, etc.)
+    // 3) Normalize Arabic characters (Alef, Yeh, etc.)
     normalized = normalized
         .replace(/[أإآا]/g, 'ا')
-        .replace(/[ىي]/g, 'ي')
-        .replace(/[ةه]/g, 'ه')
+        .replace(/[ى]/g, 'ي')
+        .replace(/[ة]/g, 'ه')
         .replace(/ؤ/g, 'و')
         .replace(/ئ/g, 'ي');
 
-    // 4. Reduce repeated characters (e.g., "shiiiiit" -> "shiit", "ااااحا" -> "ااحا")
-    // Keep 2 to distinguish some legitimate words
+    // 4) Remove diacritics / tatweel
+    normalized = normalized
+        .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
+        .replace(/ـ/g, '');
+
+    // 5) Reduce repeated characters (keep 2)
     normalized = normalized.replace(/(.)\1{2,}/g, '$1$1');
 
+    // 6) Keep letters/numbers/spaces; convert other chars to spaces (so boundaries still work)
+    normalized = normalized.replace(/[^a-z0-9\s\u0621-\u064Aء]/gi, ' ');
+    normalized = normalized.replace(/\s+/g, ' ').trim();
+
     return normalized;
+}
+
+function escapeRegex(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function tokenize(text) {
+    const clean = normalizeText(text);
+    if (!clean) return [];
+    return clean.split(/\s+/).filter(Boolean);
+}
+
+function buildWordRegex(term) {
+    // Avoid substring false positives via boundaries:
+    // - English: \b ... \b
+    // - Arabic: boundaries are weaker; we treat spaces/punctuation as boundaries by normalization.
+    const t = normalizeText(term);
+    const parts = t.split(/\s+/).filter(Boolean).map(escapeRegex);
+    if (!parts.length) return null;
+
+    // allow variable spacing between words
+    const body = parts.join('\\s+');
+    return new RegExp(`(?:^|\\s)(${body})(?=$|\\s)`, 'i');
+}
+
+function detectProfanitySmart(content, { extraTerms = [], whitelist = [] } = {}) {
+    const raw = String(content || '');
+    const normalized = normalizeText(raw);
+    if (!normalized) return { isViolation: false, matches: [] };
+
+    const list = [...new Set([...(Array.isArray(profanityList) ? profanityList : []), ...(Array.isArray(extraTerms) ? extraTerms : [])])];
+
+    const wl = new Set((Array.isArray(whitelist) ? whitelist : [])
+        .map(t => normalizeText(t))
+        .filter(Boolean));
+
+    const matches = [];
+    for (const term of list) {
+        if (!term || typeof term !== 'string') continue;
+        if (wl.size) {
+            const tNorm = normalizeText(term);
+            if (tNorm && wl.has(tNorm)) continue;
+        }
+        const rx = buildWordRegex(term);
+        if (!rx) continue;
+        const hit = rx.exec(normalized);
+        if (hit?.[1]) matches.push(term);
+    }
+
+    if (!matches.length) return { isViolation: false, matches: [] };
+    return { isViolation: true, matches: [...new Set(matches)] };
 }
 
 /**
@@ -149,4 +217,4 @@ async function analyzeMessage(messageContent) {
     };
 }
 
-module.exports = { analyzeMessage, normalizeText, levenshteinDistance };
+module.exports = { analyzeMessage, normalizeText, levenshteinDistance, detectProfanitySmart, tokenize };

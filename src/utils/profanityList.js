@@ -11,13 +11,12 @@ module.exports = [
     'asshole', 'a$$hole', 'a$$', 'as$', 'arse',
     'dick', 'd1ck', 'penis', 'cock', 'cok', 'suck my dick',
     'pussy', 'puss', 'cunt', 'cnut', 'twat',
-    'whore', 'slut', 'hoe', 'ho',
+    'whore', 'slut', 'hoe',
     'nigger', 'nigga', 'n1gger', 'n!gger', 'kneegrow',
     'faggot', 'fag', 'f@ggot', 'fgt',
-    'retard', 'rtrd', 'idiot', 'stupid', // Mild but included if strict
+    'retard', 'rtrd',
     'bastard', 'b@stard',
-    'sex', 'nude', 'nudes', 'porn', 'xxx',
-    'mother', 'mom', 'mum', 'milf', // Context sensitive checks usually better, but included per request
+
 
     // ========================
     // 🇪🇬 EGYPTIAN ARABIC (The Heavy Stuff)

@@ -18,7 +18,9 @@ const userSchema = new mongoose.Schema({
     lastWorkTimestamp: { type: Number, default: 0 }, // For work cooldown
     inventory: { type: Array, default: [] }, // Array of items
     jailed: { type: Boolean, default: false },
-    jailReleaseTime: { type: Date, default: null }
+    jailReleaseTime: { type: Date, default: null },
+    antiSwearWarningsCount: { type: Number, default: 0 },
+    antiSwearLastAt: { type: Date, default: null }
 });
 
 userSchema.index({ userId: 1, guildId: 1 }, { unique: true });
