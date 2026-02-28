@@ -226,6 +226,15 @@ setupCloneMusicButtons(client3);
         };
 
         await loginBot(client1, process.env.TOKEN, 'Main Bot');
+        
+        // --- 🧪 CRITICAL DEBUG: RAW MESSAGE LISTENER ---
+        client1.on('messageCreate', async (msg) => {
+            if (msg.author.bot) return;
+            if (msg.content.toLowerCase() === 'elora raw') {
+                await msg.reply('raw-ok-main');
+            }
+        });
+
         await loginBot(client2, process.env.TOKEN_2, 'Clone 1');
         await loginBot(client3, process.env.TOKEN_3, 'Clone 2');
 
