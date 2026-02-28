@@ -24,6 +24,11 @@ module.exports = {
     async execute(message, client) {
         if (message.author.bot || !message.guild) return;
 
+        const ANTISWEAR_DEBUG = process.env.ANTISWEAR_DEBUG === '1';
+        if (ANTISWEAR_DEBUG) {
+            console.log(`[ANTISWEAR] messageCreate fired guild=${message.guild.id} channel=${message.channelId} author=${message.author.id}`);
+        }
+
         const OMAR_ROLE_ID = '1461766723274412126';
         const HUSSAM_USER_ID = '1461766927306457109';
 
@@ -107,11 +112,16 @@ module.exports = {
                     extraTerms: Array.isArray(modSettings?.customBlacklist) ? modSettings.customBlacklist : [],
                     whitelist: Array.isArray(modSettings?.antiSwearWhitelist) ? modSettings.antiSwearWhitelist : []
                 });
+                if (ANTISWEAR_DEBUG) {
+                    console.log('[ANTISWEAR] detection=', detection);
+                }
                 if (detection?.isViolation) {
                     const threshold = Math.max(2, Math.min(20, Number(modSettings?.antiSwearThreshold || 5)));
 
                     // 1) Delete message
-                    await message.delete().catch(() => { });
+                    await message.delete().catch((e) => {
+                        if (ANTISWEAR_DEBUG) console.log('[ANTISWEAR] delete failed:', e?.message || e);
+                    });
 
                     // 2) Track warnings (MongoDB persistence via User model)
                     const key = `${message.guild.id}:${message.author.id}`;

@@ -49,6 +49,28 @@ function normalizeText(text) {
     return normalized;
 }
 
+function normalizeTextKeepDigits(text) {
+    if (!text) return '';
+    let normalized = String(text).toLowerCase();
+
+    // Arabic normalization
+    normalized = normalized
+        .replace(/[أإآا]/g, 'ا')
+        .replace(/[ى]/g, 'ي')
+        .replace(/[ة]/g, 'ه')
+        .replace(/ؤ/g, 'و')
+        .replace(/ئ/g, 'ي');
+
+    normalized = normalized
+        .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
+        .replace(/ـ/g, '');
+
+    normalized = normalized.replace(/(.)\1{2,}/g, '$1$1');
+    normalized = normalized.replace(/[^a-z0-9\s\u0621-\u064Aء]/gi, ' ');
+    normalized = normalized.replace(/\s+/g, ' ').trim();
+    return normalized;
+}
+
 function escapeRegex(s) {
     return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -75,7 +97,8 @@ function buildWordRegex(term) {
 function detectProfanitySmart(content, { extraTerms = [], whitelist = [] } = {}) {
     const raw = String(content || '');
     const normalized = normalizeText(raw);
-    if (!normalized) return { isViolation: false, matches: [] };
+    const normalizedDigits = normalizeTextKeepDigits(raw);
+    if (!normalized && !normalizedDigits) return { isViolation: false, matches: [] };
 
     const list = [...new Set([...(Array.isArray(profanityList) ? profanityList : []), ...(Array.isArray(extraTerms) ? extraTerms : [])])];
 
@@ -92,7 +115,7 @@ function detectProfanitySmart(content, { extraTerms = [], whitelist = [] } = {})
         }
         const rx = buildWordRegex(term);
         if (!rx) continue;
-        const hit = rx.exec(normalized);
+        const hit = rx.exec(normalized) || rx.exec(normalizedDigits);
         if (hit?.[1]) matches.push(term);
     }
 
