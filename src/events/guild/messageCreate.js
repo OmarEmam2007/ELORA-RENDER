@@ -47,67 +47,7 @@ module.exports = {
             return;
         }
 
-        // --- 🛡️ SMART MULTILINGUAL MODERATION SYSTEM (DISABLED) ---
-        /*
-        try {
-            const settings = await ModSettings.findOne({ guildId: message.guild.id }) || { enabled: true, sensitivity: 3 };
-
-            if (settings.enabled && !message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
-                const analysis = await analyzeMessage(message.content);
-
-                if (analysis.isViolation) {
-                    // 1. Log the detection for learning
-                    analysis.matches.forEach(m => logDetection(message.guild.id, m));
-
-                    // 2. Delete the offending message
-                    await message.delete().catch(() => { });
-
-                    // 3. Send Ephemeral Warning (using simple ephemeral reply if slash, but since this is messageCreate, we send and delete)
-                    const warning = await message.channel.send({
-                        content: `⚠️ ${message.author}, your message was removed for containing inappropriate language. Repeated violations may result in sanctions.`
-                    });
-                    setTimeout(() => warning.delete().catch(() => { }), 7000);
-
-                    // 4. Create a Case in DB
-                    const caseCount = await ModLog.countDocuments({ guildId: message.guild.id }) + 1;
-                    const modCase = await ModLog.create({
-                        guildId: message.guild.id,
-                        caseId: caseCount,
-                        userId: message.author.id,
-                        content: message.content, // Should ideally store censored version in future
-                        severity: analysis.severity,
-                        confidence: analysis.confidence,
-                        type: 'Profanity'
-                    });
-
-                    // 5. Send to Log Channel
-                    if (settings.logChannelId) {
-                        const logChannel = message.guild.channels.cache.get(settings.logChannelId);
-                        if (logChannel) {
-                            const logData = {
-                                user: message.author,
-                                channel: message.channel,
-                                action: 'Message Deleted',
-                                severity: analysis.severity,
-                                confidence: analysis.confidence,
-                                violationType: 'Profanity',
-                                originalMessage: message.content,
-                                matches: analysis.matches,
-                                reason: analysis.reason,
-                                caseId: caseCount
-                            };
-                            const { embeds, components } = createLogEmbed(logData);
-                            await logChannel.send({ embeds, components });
-                        }
-                    }
-
-                    return; // STOP processing this message!
-                }
-            }
-        } catch (error) {
-            console.error('❌ Smart Mod Error:', error);
-        }
-        */
+        // Smart Anti-Swearing is implemented below using detectProfanitySmart (active).
 
         // --- Sovereign Nexus: The Hallucination Buffer ---
         if (message.content && message.content.length > 3) {
@@ -140,11 +80,8 @@ module.exports = {
             (message.member?.roles?.cache && whitelistRoles.some(r => message.member.roles.cache.has(r)))
         );
 
-        const hasBypassPerms = Boolean(
-            message.member?.permissions?.has(PermissionFlagsBits.ManageMessages) ||
-            message.member?.permissions?.has(PermissionFlagsBits.ManageGuild) ||
-            message.member?.permissions?.has(PermissionFlagsBits.Administrator)
-        );
+        // Note: do NOT bypass anti-swearing for ManageMessages/ManageGuild.
+        // Only Server Owner and Administrators are ignored.
 
         const isServerOwner = message.guild?.ownerId && message.author.id === message.guild.ownerId;
         const isAdministrator = Boolean(message.member?.permissions?.has(PermissionFlagsBits.Administrator));
@@ -155,7 +92,7 @@ module.exports = {
         const spamLimit = modLiteMode === 'strict' ? (6 - sensitivity) : (7 - sensitivity);
         const timeoutSeconds = modLiteMode === 'strict' ? 120 : 60;
 
-        const shouldApplyModLite = isModLiteEnabled && !isWhitelisted && !hasBypassPerms;
+        const shouldApplyModLite = isModLiteEnabled && !isWhitelisted;
 
         // Anti-swear bypass: ignore server owner and administrators.
         const shouldApplyAntiSwear = shouldApplyModLite && !isServerOwner && !isAdministrator;
@@ -165,6 +102,7 @@ module.exports = {
         // Action: delete, DM warning count, log, timeout at threshold.
         if (shouldApplyAntiSwear) {
             try {
+                if (message.author.bot) return;
                 const detection = detectProfanitySmart(message.content, {
                     extraTerms: Array.isArray(modSettings?.customBlacklist) ? modSettings.customBlacklist : [],
                     whitelist: Array.isArray(modSettings?.antiSwearWhitelist) ? modSettings.antiSwearWhitelist : []
