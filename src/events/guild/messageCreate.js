@@ -19,6 +19,15 @@ module.exports = {
     async execute(message, client) {
         if (message.author.bot || !message.guild) return;
 
+        // --- 🎮 Prefix Commands FIRST (so moderation never breaks commands) ---
+        try {
+            if (typeof handlePrefixCommand === 'function') {
+                await handlePrefixCommand(message, client);
+            }
+        } catch (e) {
+            console.error('[PREFIX] Error:', e);
+        }
+
         // Ignore stickers / emoji-only messages for anti-swear
         const hasStickers = Boolean(message.stickers && message.stickers.size > 0);
         const rawText = String(message.content || '');
@@ -170,13 +179,6 @@ module.exports = {
             console.error('[MODERATION] Error:', e);
         }
 
-        // --- 🎮 Prefix Commands (e.g. "elora nick", "elora money") ---
-        try {
-            if (typeof handlePrefixCommand === 'function') {
-                await handlePrefixCommand(message, client);
-            }
-        } catch (e) {
-            console.error('[PREFIX] Error:', e);
-        }
+        // Prefix commands are already handled at the top of this handler.
     }
 };
