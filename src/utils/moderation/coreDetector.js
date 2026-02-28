@@ -90,14 +90,14 @@ function buildWordRegex(term) {
     const t = normalizeText(term);
     const parts = t.split(/\s+/).filter(Boolean).map(p => {
         const escaped = escapeRegex(p);
-        // Allow repeated characters for EVERY character in the word (e.g., "احاااا" matches "احا")
+        // Allow 1 or more occurrences of each character in the word (e.g., "احاااا" matches "احا")
         return escaped.split('').map(char => `${char}+`).join('');
     });
     if (!parts.length) return null;
 
-    const body = parts.join('\\s+');
-    // Boundary check using whitespace or start/end of string
-    return new RegExp(`(?:^|\\s)(${body})(?=$|\\s)`, 'i');
+    const body = parts.join('[\\s\\.\\-_\\*]*'); // Allow spaces, dots, underscores, dashes, stars between letters
+    // Improved boundary check for Arabic/English/Franco
+    return new RegExp(`(?:^|[^\\w\\u0621-\\u064Aء])(${body})(?=[^\\w\\u0621-\\u064Aء]|$)`, 'i');
 }
 
 function detectProfanitySmart(content, { extraTerms = [], whitelist = [] } = {}) {

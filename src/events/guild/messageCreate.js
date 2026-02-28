@@ -110,8 +110,8 @@ module.exports = {
 
         const shouldApplyModLite = isModLiteEnabled && !isWhitelisted;
 
-        // Anti-swear bypass: ignore ONLY server owner.
-        const shouldApplyAntiSwear = shouldApplyModLite && !isServerOwner;
+        // Anti-swear bypass: DISABLED FOR TESTING (Triggers for everyone including Owner/Admin)
+        const shouldApplyAntiSwear = shouldApplyModLite;
 
         // --- 🤖 Smart Anti-Swearing (EN/AR/EGY + Franco) ---
         // False-positive safe: boundary-aware matching after normalization.
