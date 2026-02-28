@@ -22,6 +22,8 @@ if (!global.antiSwearWarnings) global.antiSwearWarnings = new Map();
 module.exports = {
     name: 'messageCreate',
     async execute(message, client) {
+        // Log for debugging event firing
+        // console.log(`[DEBUG] messageCreate triggered: ${message.content}`);
         if (message.author.bot || !message.guild) return;
 
         const ANTISWEAR_DEBUG = process.env.ANTISWEAR_DEBUG === '1';
