@@ -44,8 +44,8 @@ function normalizeText(text) {
         .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
         .replace(/ـ/g, '');
 
-    // 5) Reduce repeated characters (keep 2)
-    normalized = normalized.replace(/(.)\1{2,}/g, '$1$1');
+    // 5) Reduce repeated characters (keep 2) - ONLY for English to avoid breaking Arabic
+    normalized = normalized.replace(/([a-z])\1{2,}/g, '$1$1');
 
     // 6) Keep letters/numbers/spaces; convert other chars to spaces (so boundaries still work)
     normalized = normalized.replace(/[^a-z0-9\s\u0621-\u064Aء]/gi, ' ');
@@ -87,13 +87,15 @@ function tokenize(text) {
 }
 
 function buildWordRegex(term) {
-    // Avoid substring false positives via boundaries:
-    // - English: \b ... \b
-    // - Arabic: boundaries are weaker; we treat spaces/punctuation as boundaries by normalization.
     const t = normalizeText(term);
-    const parts = t.split(/\s+/).filter(Boolean).map(escapeRegex);
+    const parts = t.split(/\s+/).filter(Boolean).map(p => {
+        const escaped = escapeRegex(p);
+        // Allow 1 or more occurrences of each character in the word (e.g., "احاااا" matches "احا")
+        return escaped.split('').map(char => `${char}+`).join('');
+    });
     if (!parts.length) return null;
 
+<<<<<<< HEAD
     // allow variable spacing between words
     let body = parts.join('\\s+');
 
@@ -109,6 +111,11 @@ function buildWordRegex(term) {
     }
 
     return new RegExp(`(?:^|\\s)(${body})(?=$|\\s)`, 'i');
+=======
+    const body = parts.join('[\\s\\.\\-_\\*]*'); // Allow spaces, dots, underscores, dashes, stars between letters
+    // Improved boundary check for Arabic/English/Franco
+    return new RegExp(`(?:^|[^\\w\\u0621-\\u064Aء])(${body})(?=[^\\w\\u0621-\\u064Aء]|$)`, 'i');
+>>>>>>> b3e0de26bab4853de900fc4372f5d8cafb95336e
 }
 
 function detectProfanitySmart(content, { extraTerms = [], whitelist = [] } = {}) {
