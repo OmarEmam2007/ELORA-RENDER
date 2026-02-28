@@ -71,12 +71,15 @@ async function handlePrefixCommand(message, client) {
     // Main prefix style: "elora <command> ..."
     const eloraPrefix = /^elora\s+/i;
     const legacyPrefix = client?.config?.prefix ? String(client.config.prefix) : null;
+    const bangPrefix = '!';
 
     let args = null;
     if (eloraPrefix.test(text)) {
         args = text.replace(eloraPrefix, '').trim().split(/\s+/).filter(Boolean);
     } else if (legacyPrefix && text.startsWith(legacyPrefix)) {
         args = text.slice(legacyPrefix.length).trim().split(/\s+/).filter(Boolean);
+    } else if (text.startsWith(bangPrefix)) {
+        args = text.slice(bangPrefix.length).trim().split(/\s+/).filter(Boolean);
     } else {
         return;
     }
