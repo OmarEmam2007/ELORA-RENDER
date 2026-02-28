@@ -193,13 +193,14 @@ setupCloneMusicButtons(client3);
         const { loadPrefixCommands } = require('./handlers/prefixCommandHandler');
         
         // تحميل الأوامر والإيفنتس لكل البوتات لضمان عملها جميعاً
-        for (const client of [client1, client2, client3]) {
+        const bots = [client1, client2, client3];
+        for (const bot of bots) {
             // 1. تحميل أوامر البريفكس
-            await loadPrefixCommands(client);
+            await loadPrefixCommands(bot);
             // 2. تحميل أوامر السلاش
-            await loadCommands(client);
+            await loadCommands(bot);
             // 3. تحميل الإيفنتس
-            await loadEvents(client);
+            await loadEvents(bot);
         }
       
 

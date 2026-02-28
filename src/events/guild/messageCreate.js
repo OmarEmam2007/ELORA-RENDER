@@ -64,7 +64,7 @@ module.exports = {
                 const eloraPrefix = /^elora\s+/i;
                 const legacyPrefix = client?.config?.prefix ? String(client.config.prefix) : null;
                 const bangPrefix = '!';
-                const isCommand = eloraPrefix.test(text) || (legacyPrefix && text.startsWith(legacyPrefix)) || text.startsWith(bangPrefix);
+                const isCommand = eloraPrefix.test(text) || (legacyPrefix && text.startsWith(legacyPrefix)) || text.startsWith(bangPrefix) || text.startsWith('!');
 
                 // Hardcoded common terms + DB custom terms
                 const hardcodedBlacklist = ['احا', 'a7a', 'كسمك', 'nigger', 'niga', 'fuck', 'shit'];

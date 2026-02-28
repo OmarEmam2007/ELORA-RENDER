@@ -60,7 +60,7 @@ async function loadPrefixCommands(client) {
         }
     }
     
-    console.log(`✅ Loaded ${client.prefixCommands.size} prefix commands`);
+    console.log(`✅ [${client.user?.tag || 'Bot'}] Loaded ${client.prefixCommands.size} prefix commands`);
 }
 
 async function handlePrefixCommand(message, client) {
@@ -75,7 +75,7 @@ async function handlePrefixCommand(message, client) {
     const legacyPrefix = client?.config?.prefix ? String(client.config.prefix) : null;
     const bangPrefix = '!';
 
-    let args = null;
+    let args = [];
     let commandName = null;
 
     if (eloraPrefixMatch) {
@@ -83,17 +83,18 @@ async function handlePrefixCommand(message, client) {
         commandName = String(args.shift() || '').toLowerCase();
     } else if (legacyPrefix && text.startsWith(legacyPrefix)) {
         const content = text.slice(legacyPrefix.length).trim();
-        if (!content) return;
-        args = content.split(/\s+/).filter(Boolean);
-        commandName = String(args.shift() || '').toLowerCase();
+        if (content) {
+            args = content.split(/\s+/).filter(Boolean);
+            commandName = String(args.shift() || '').toLowerCase();
+        }
     } else if (text.startsWith(bangPrefix)) {
         const content = text.slice(bangPrefix.length).trim();
-        if (!content) return;
-        args = content.split(/\s+/).filter(Boolean);
-        commandName = String(args.shift() || '').toLowerCase();
-    } else {
-        return;
+        if (content) {
+            args = content.split(/\s+/).filter(Boolean);
+            commandName = String(args.shift() || '').toLowerCase();
+        }
     }
+
     if (!commandName) return;
 
     const cmd = client.prefixCommands?.get(commandName);
