@@ -123,6 +123,12 @@ module.exports = {
                         if (ANTISWEAR_DEBUG) console.log('[ANTISWEAR] delete failed:', e?.message || e);
                     });
 
+                    // Send a temporary public warning
+                    const publicWarn = await message.channel.send(`⚠️ ${message.author}, ممنوع الشتائم في هذا السيرفر!`).catch(() => null);
+                    if (publicWarn) {
+                        setTimeout(() => publicWarn.delete().catch(() => {}), 5000);
+                    }
+
                     // 2) Track warnings (MongoDB persistence via User model)
                     const key = `${message.guild.id}:${message.author.id}`;
                     let userProfile = await User.findOne({ userId: message.author.id, guildId: message.guild.id }).catch(() => null);

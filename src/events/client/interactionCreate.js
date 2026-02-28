@@ -471,18 +471,23 @@ module.exports = {
 
                     if (interaction.customId.startsWith('dash_')) {
                         let settings = await ModSettings.findOne({ guildId: interaction.guildId }) || new ModSettings({ guildId: interaction.guildId });
-                        switch (action) {
-                            case 'toggle':
-                                if (parts[2] === 'filter') settings.enabled = !settings.enabled;
-                                if (parts[2] === 'learning') settings.learningMode = !settings.learningMode;
-                                break;
-                            case 'sensitivity':
-                                if (parts[2] === 'up') settings.sensitivity = Math.min(5, settings.sensitivity + 1);
-                                if (parts[2] === 'down') settings.sensitivity = Math.max(1, settings.sensitivity - 1);
-                                break;
+                        
+                        // dash_toggle_filter
+                        // dash_toggle_learning
+                        // dash_sensitivity_up
+                        // dash_sensitivity_down
+                        
+                        if (action === 'toggle') {
+                            if (parts[2] === 'filter') settings.enabled = !settings.enabled;
+                            if (parts[2] === 'learning') settings.learningMode = !settings.learningMode;
+                        } else if (action === 'sensitivity') {
+                            if (parts[2] === 'up') settings.sensitivity = Math.min(5, (settings.sensitivity || 3) + 1);
+                            if (parts[2] === 'down') settings.sensitivity = Math.max(1, (settings.sensitivity || 3) - 1);
                         }
+                        
                         await settings.save();
-                        return safeUpdate(await generateDashboard(interaction.guildId));
+                        const dashboard = await generateDashboard(interaction.guildId);
+                        return safeUpdate(dashboard);
                     }
                 } catch (e) { return safeReply({ content: `❌ ${e.message}`, ephemeral: true }); }
             }
