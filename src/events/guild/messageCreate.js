@@ -22,8 +22,17 @@ if (!global.antiSwearWarnings) global.antiSwearWarnings = new Map();
 module.exports = {
     name: 'messageCreate',
     async execute(message, client) {
+        // --- 🧪 Debug Test Command ---
+        if (message.content === '!test') {
+            const contentAvailable = message.content.length > 0;
+            return message.reply(`✅ **Elora Debug Mode**\n- Content Length: \`${message.content.length}\`\n- Content Available: \`${contentAvailable}\`\n- Intents Status: ${contentAvailable ? 'OK' : 'FAIL (Enable Message Content Intent!)'}`);
+        }
+
         // Log for debugging event firing
-        // console.log(`[DEBUG] messageCreate triggered: ${message.content}`);
+        if (process.env.ANTISWEAR_DEBUG === '1') {
+            console.log(`[ANTISWEAR] messageCreate fired: "${message.content}"`);
+        }
+
         if (message.author.bot || !message.guild) return;
 
         const ANTISWEAR_DEBUG = process.env.ANTISWEAR_DEBUG === '1';
