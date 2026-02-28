@@ -57,8 +57,14 @@ module.exports = {
                     // 1) Delete message
                     await message.delete().catch(() => {});
 
-                    // Send a temporary public warning
-                    const publicWarn = await message.channel.send(`⚠️ ${message.author}, ممنوع الشتائم في هذا السيرفر!`).catch(() => null);
+                    // Send a temporary public warning (Language-aware)
+                    const detectedWord = (detection.matches || [])[0] || '';
+                    const isArabic = /[\u0600-\u06FF]/.test(detectedWord);
+                    const warnMsg = isArabic 
+                        ? `⚠️ ${message.author}, ممنوع الشتائم في هذا السيرفر!` 
+                        : `⚠️ ${message.author}, Profanity is not allowed in this server!`;
+
+                    const publicWarn = await message.channel.send(warnMsg).catch(() => null);
                     if (publicWarn) {
                         setTimeout(() => publicWarn.delete().catch(() => {}), 5000);
                     }
