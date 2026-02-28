@@ -19,6 +19,20 @@ module.exports = {
     async execute(message, client) {
         if (message.author.bot || !message.guild) return;
 
+        const MESSAGE_DEBUG = process.env.MESSAGE_DEBUG === '1';
+        if (MESSAGE_DEBUG) {
+            console.log(`[MSG] ${message.guild.id}:${message.channelId} ${message.author.id} :: ${String(message.content || '').slice(0, 120)}`);
+        }
+
+        // Hard sanity probe to confirm messageCreate is firing in production
+        if (String(message.content || '').trim().toLowerCase() === 'elora probe') {
+            try {
+                await message.reply('probe-ok');
+            } catch (_) {
+                // ignore
+            }
+        }
+
         // --- 🎮 Prefix Commands FIRST (so moderation never breaks commands) ---
         try {
             if (typeof handlePrefixCommand === 'function') {
