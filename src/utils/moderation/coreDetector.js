@@ -44,8 +44,11 @@ function normalizeText(text) {
         .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
         .replace(/ـ/g, '');
 
-    // 5) Reduce repeated characters (keep 2) - ONLY for English to avoid breaking Arabic
+    // 5) Reduce repeated characters to handle elongations
+    // - Latin: keep max 2 ("fuuuuck" -> "fuuck")
+    // - Arabic: collapse repeats to 1 ("منيووووك" -> "منيوك")
     normalized = normalized.replace(/([a-z])\1{2,}/g, '$1$1');
+    normalized = normalized.replace(/([\u0621-\u064Aء])\1{1,}/g, '$1');
 
     // 6) Keep letters/numbers/spaces; convert other chars to spaces (so boundaries still work)
     normalized = normalized.replace(/[^a-z0-9\s\u0621-\u064Aء]/gi, ' ');
@@ -70,7 +73,8 @@ function normalizeTextKeepDigits(text) {
         .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
         .replace(/ـ/g, '');
 
-    normalized = normalized.replace(/(.)\1{2,}/g, '$1$1');
+    normalized = normalized.replace(/([a-z])\1{2,}/g, '$1$1');
+    normalized = normalized.replace(/([\u0621-\u064Aء])\1{1,}/g, '$1');
     normalized = normalized.replace(/[^a-z0-9\s\u0621-\u064Aء]/gi, ' ');
     normalized = normalized.replace(/\s+/g, ' ').trim();
     return normalized;
