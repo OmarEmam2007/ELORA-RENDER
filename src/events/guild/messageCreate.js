@@ -45,16 +45,34 @@ module.exports = {
             console.error('[UNFURL] Error:', e);
         }
 
-        // --- 🎮 Prefix Commands FIRST (so moderation never breaks commands) ---
+        // --- 🤖 AI Chat / Mention Response ---
+        const botMentioned = message.mentions.has(client.user) || 
+                           (message.reference && (await message.channel.messages.fetch(message.reference.messageId)).author.id === client.user.id);
+        
+        if (botMentioned && !message.author.bot) {
+            try {
+                const cleanContent = message.content.replace(/<@!?\d+>/g, '').trim();
+                if (cleanContent.length > 0) {
+                    const result = await model.generateContent(`You are Elora, a helpful and friendly digital assistant with a lunar theme. Respond to this message: ${cleanContent}`);
+                    const response = await result.response;
+                    return await message.reply(response.text());
+                }
+            } catch (e) {
+                console.error('[AI CHAT] Error:', e);
+            }
+        }
+
+        // --- 🎮 Prefix Commands (e.g. "elora nick", "elora money") ---
         try {
             if (typeof handlePrefixCommand === 'function') {
-                await handlePrefixCommand(message, client);
+                const wasCommand = await handlePrefixCommand(message, client);
+                if (wasCommand) return; // Only stop if a command was actually executed
             }
         } catch (e) {
             console.error('[PREFIX] Error:', e);
         }
 
-        // Ignore stickers / emoji-only messages for anti-swear
+        // --- 🛡️ Lightweight Moderation (Anti-Invite, etc.) ---
         const hasStickers = Boolean(message.stickers && message.stickers.size > 0);
         const rawText = String(message.content || '');
         const withoutCustomEmoji = rawText.replace(/<a?:\w+:\d+>/g, ' ');
@@ -198,41 +216,6 @@ module.exports = {
             if (global.messageBuffer.length > 50) global.messageBuffer.shift();
         }
 
-        // --- 🛡️ Lightweight Moderation (Anti-Invite, etc.) ---
-        try {
-            const modSettings = await ModSettings.findOne({ guildId: message.guild.id }).catch(() => null);
-            const isModLiteEnabled = modSettings?.enabled !== false;
-            if (isModLiteEnabled) {
-                const linkType = checkLink(message.content);
-                if (linkType === 'INVITE') {
-                    await message.delete().catch(() => { });
-                    const warningMsg = await message.channel.send(`${message.author}, invite links are not allowed here.`).catch(() => null);
-                    if (warningMsg) setTimeout(() => warningMsg.delete().catch(() => { }), 6000);
-                    return;
-                }
-            }
-        } catch (e) {
-            console.error('[MODERATION] Error:', e);
-        }
-
-        // --- 🤖 AI Chat / Mention Response ---
-        const botMentioned = message.mentions.has(client.user) || 
-                           (message.reference && (await message.channel.messages.fetch(message.reference.messageId)).author.id === client.user.id);
-        
-        if (botMentioned && !message.author.bot) {
-            try {
-                const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-                
-                const cleanContent = message.content.replace(/<@!?\d+>/g, '').trim();
-                const result = await model.generateContent(`You are Elora, a helpful and friendly digital assistant with a lunar theme. Respond to this message: ${cleanContent}`);
-                const response = await result.response;
-                await message.reply(response.text());
-            } catch (e) {
-                console.error('[AI CHAT] Error:', e);
-            }
-        }
-
-        // Prefix commands are already handled at the top of this handler.
+        // Prefix commands are already handled.
     }
 };
