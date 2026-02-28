@@ -51,9 +51,12 @@ module.exports = {
         
         if (botMentioned && !message.author.bot) {
             try {
+                const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+                const chatModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+                
                 const cleanContent = message.content.replace(/<@!?\d+>/g, '').trim();
                 if (cleanContent.length > 0) {
-                    const result = await model.generateContent(`You are Elora, a helpful and friendly digital assistant with a lunar theme. Respond to this message: ${cleanContent}`);
+                    const result = await chatModel.generateContent(`You are Elora, a helpful and friendly digital assistant with a lunar theme. Respond to this message: ${cleanContent}`);
                     const response = await result.response;
                     return await message.reply(response.text());
                 }
