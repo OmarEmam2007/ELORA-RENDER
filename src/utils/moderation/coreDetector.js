@@ -114,6 +114,9 @@ function normalizeText(text) {
     // 1) Convert to lowercase
     let normalized = String(text).toLowerCase();
 
+    // Remove emojis (unicode pictographs) early
+    normalized = normalized.replace(/[\p{Extended_Pictographic}\uFE0F\u200D]+/gu, ' ');
+
     // 1.5) Collapse elongated letters early (helps Franco like a7aaaaaaaa)
     normalized = normalized.replace(/([a-z])\1{1,}/g, '$1');
     normalized = normalized.replace(/([\u0621-\u064Aء])\1{1,}/g, '$1');

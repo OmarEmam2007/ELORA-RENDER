@@ -25,6 +25,13 @@ module.exports = {
         const newContent = String(newMessage?.content || '');
         if (oldContent === newContent) return; // Only process content changes
 
+        // Ignore stickers / emoji-only edits for anti-swear
+        const hasStickers = Boolean(newMessage?.stickers && newMessage.stickers.size > 0);
+        const withoutCustomEmoji = newContent.replace(/<a?:\w+:\d+>/g, ' ');
+        const withoutUnicodeEmoji = withoutCustomEmoji.replace(/[\p{Extended_Pictographic}\uFE0F\u200D]+/gu, ' ');
+        const textForModeration = withoutUnicodeEmoji.replace(/\s+/g, ' ').trim();
+        if (hasStickers && !textForModeration) return;
+
         const ANTISWEAR_DEBUG = process.env.ANTISWEAR_DEBUG === '1';
 
         // --- 🤖 Smart Anti-Swearing on EDIT ---
@@ -70,9 +77,9 @@ module.exports = {
             }
 
             if (shouldApplyAntiSwear) {
-                if (!newContent) return;
+                if (!textForModeration && !newContent) return;
                 const detector = typeof detectProfanityAI === 'function' ? detectProfanityAI : async (c, o) => detectProfanitySmart(c, o);
-                const detection = await detector(newContent, {
+                const detection = await detector(textForModeration || newContent, {
                     extraTerms: Array.isArray(modSettings?.customBlacklist) ? modSettings.customBlacklist : [],
                     whitelist: Array.isArray(modSettings?.antiSwearWhitelist) ? modSettings.antiSwearWhitelist : []
                 });
