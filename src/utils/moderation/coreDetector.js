@@ -95,7 +95,19 @@ function buildWordRegex(term) {
     if (!parts.length) return null;
 
     // allow variable spacing between words
-    const body = parts.join('\\s+');
+    let body = parts.join('\\s+');
+
+    // English morphology (safe): allow plural/possessive suffix for single-word alphabetic terms.
+    // Examples: nigger -> niggers, nigger's
+    if (parts.length === 1) {
+        const rawPart = parts[0];
+        const norm = normalizeText(term);
+        const isAsciiAlpha = /^[a-z]+$/.test(norm);
+        if (isAsciiAlpha && norm.length >= 4) {
+            body = `${rawPart}(?:s|es|\\'s)?`;
+        }
+    }
+
     return new RegExp(`(?:^|\\s)(${body})(?=$|\\s)`, 'i');
 }
 

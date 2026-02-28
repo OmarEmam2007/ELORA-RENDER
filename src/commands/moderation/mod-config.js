@@ -58,6 +58,28 @@ module.exports = {
                         .setMaxValue(20)
                         .setRequired(true)
                 )
+        )
+        .addSubcommand(sub =>
+            sub.setName('blacklist-add')
+                .setDescription('Teach the bot a new prohibited word/phrase (anti-swearing).')
+                .addStringOption(opt =>
+                    opt.setName('term')
+                        .setDescription('Word or short phrase to block')
+                        .setRequired(true)
+                )
+        )
+        .addSubcommand(sub =>
+            sub.setName('blacklist-remove')
+                .setDescription('Remove a term from the custom anti-swearing blacklist.')
+                .addStringOption(opt =>
+                    opt.setName('term')
+                        .setDescription('Word or short phrase to remove')
+                        .setRequired(true)
+                )
+        )
+        .addSubcommand(sub =>
+            sub.setName('blacklist-list')
+                .setDescription('List all custom blocked terms (anti-swearing) for this server.')
         ),
     async execute(interaction, client) {
         const sub = interaction.options.getSubcommand();
@@ -150,6 +172,53 @@ module.exports = {
                 { upsert: true }
             );
             return interaction.reply({ content: `✅ Anti-swearing timeout threshold set to ${count} warnings.`, ephemeral: true });
+        }
+
+        if (sub === 'blacklist-add') {
+            const raw = interaction.options.getString('term');
+            const term = String(raw || '').trim();
+            if (!term) return interaction.reply({ content: '❌ Please provide a valid term.', ephemeral: true });
+            if (term.length > 64) return interaction.reply({ content: '❌ Term is too long (max 64 characters).', ephemeral: true });
+
+            // Prevent adding whitelisted terms by mistake.
+            const settings = await ModSettings.findOne({ guildId: interaction.guildId }).lean().catch(() => null);
+            const wl = Array.isArray(settings?.antiSwearWhitelist) ? settings.antiSwearWhitelist : [];
+            if (wl.some(t => String(t).toLowerCase() === term.toLowerCase())) {
+                return interaction.reply({ content: `❌ "${term}" is currently whitelisted. Remove it from whitelist first.`, ephemeral: true });
+            }
+
+            await ModSettings.findOneAndUpdate(
+                { guildId: interaction.guildId },
+                { $addToSet: { customBlacklist: term } },
+                { upsert: true }
+            );
+
+            return interaction.reply({ content: `✅ Added "${term}" to the custom anti-swearing blacklist.`, ephemeral: true });
+        }
+
+        if (sub === 'blacklist-remove') {
+            const raw = interaction.options.getString('term');
+            const term = String(raw || '').trim();
+            if (!term) return interaction.reply({ content: '❌ Please provide a valid term.', ephemeral: true });
+
+            await ModSettings.findOneAndUpdate(
+                { guildId: interaction.guildId },
+                { $pull: { customBlacklist: term } },
+                { upsert: true }
+            );
+
+            return interaction.reply({ content: `✅ Removed "${term}" from the custom anti-swearing blacklist.`, ephemeral: true });
+        }
+
+        if (sub === 'blacklist-list') {
+            const settings = await ModSettings.findOne({ guildId: interaction.guildId }).lean().catch(() => null);
+            const list = Array.isArray(settings?.customBlacklist) ? settings.customBlacklist : [];
+            if (!list.length) {
+                return interaction.reply({ content: 'ℹ️ No custom blacklisted terms set for this server.', ephemeral: true });
+            }
+            const shown = list.slice(0, 50).map((t, i) => `${i + 1}. ${t}`).join('\n');
+            const extra = list.length > 50 ? `\n\n…and ${list.length - 50} more.` : '';
+            return interaction.reply({ content: `Custom anti-swear blacklist (${list.length}):\n${shown}${extra}`, ephemeral: true });
         }
     },
 };

@@ -19,6 +19,9 @@ if (!global.messageBuffer) global.messageBuffer = [];
 // Map<`${guildId}:${userId}`, { count: number, lastAt: number }>
 if (!global.antiSwearWarnings) global.antiSwearWarnings = new Map();
 
+// Module load marker (helps confirm the correct file is loaded in production)
+console.log('✅ [Events] Loaded guild/messageCreate.js');
+
 module.exports = {
     name: 'messageCreate',
     async execute(message, client) {
@@ -26,7 +29,10 @@ module.exports = {
 
         const ANTISWEAR_DEBUG = process.env.ANTISWEAR_DEBUG === '1';
         if (ANTISWEAR_DEBUG) {
-            console.log(`[ANTISWEAR] messageCreate fired guild=${message.guild.id} channel=${message.channelId} author=${message.author.id}`);
+            console.log(
+                `[ANTISWEAR] fired guild=${message.guild.id} channel=${message.channelId} author=${message.author.id} ` +
+                `partial=${Boolean(message.partial)} contentLen=${String(message.content || '').length}`
+            );
         }
 
         const OMAR_ROLE_ID = '1461766723274412126';
