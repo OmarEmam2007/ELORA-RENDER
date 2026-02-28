@@ -16,6 +16,17 @@ module.exports = {
         const isSlash = interaction.isChatInputCommand?.();
         const user = isSlash ? interaction.user : interaction.author;
 
+        // Signature check
+        let mainMsg = interaction;
+        let bot = client;
+        let commandArgs = args;
+
+        if (interaction.isChatInputCommand === undefined && client instanceof Array) {
+            mainMsg = interaction;
+            commandArgs = client;
+            bot = args;
+        }
+
         let targetUser, duration, reason;
 
         if (isSlash) {
@@ -24,21 +35,21 @@ module.exports = {
             reason = interaction.options.getString('reason') || 'Temporal Stasis Protocol';
         } else {
             // Prefix: !timeout @User [Duration] [Reason]
-            const targetId = args[0]?.replace(/[<@!>]/g, '');
-            if (!targetId || !args[1]) {
+            const targetId = commandArgs[0]?.replace(/[<@!>]/g, '');
+            if (!targetId || !commandArgs[1]) {
                 return interaction.reply({
                     embeds: [new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription(`${THEME.ICONS.CROSS} **Usage:** \`!timeout @User [Minutes] [Reason]\``)]
                 });
             }
             try {
-                targetUser = await client.users.fetch(targetId);
+                targetUser = await bot.users.fetch(targetId);
             } catch (error) {
                 return interaction.reply({ content: '❌ Invalid User', ephemeral: true });
             }
 
-            duration = parseInt(args[1]);
+            duration = parseInt(commandArgs[1]);
             if (isNaN(duration)) return interaction.reply('❌ Invalid duration number.');
-            reason = args.slice(2).join(' ') || 'Temporal Stasis Protocol';
+            reason = commandArgs.slice(2).join(' ') || 'Temporal Stasis Protocol';
         }
 
         const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
@@ -70,7 +81,7 @@ module.exports = {
             '🧊 Stasis Complete.'
         ];
 
-        let msg;
+        let responseMsg;
         const initEmbed = new EmbedBuilder().setColor(THEME.COLORS.ACCENT).setDescription(`${frames[0]}`);
 
         const loadingAsset = buildAssetAttachment('loading');
@@ -78,9 +89,9 @@ module.exports = {
 
         if (isSlash) {
             await interaction.reply({ embeds: [initEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
-            msg = interaction;
+            responseMsg = interaction;
         } else {
-            msg = await interaction.reply({ embeds: [initEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
+            responseMsg = await interaction.reply({ embeds: [initEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
         }
 
         for (let i = 1; i < frames.length; i++) {
@@ -88,7 +99,7 @@ module.exports = {
             const embed = new EmbedBuilder().setColor(THEME.COLORS.ACCENT).setDescription(`${frames[i]}`);
             if (loadingAsset?.url) embed.setImage(loadingAsset.url);
             if (isSlash) await interaction.editReply({ embeds: [embed] });
-            else await msg.edit({ embeds: [embed] });
+            else await responseMsg.edit({ embeds: [embed] });
         }
 
         // --- 3. Execute ---
@@ -121,7 +132,7 @@ module.exports = {
             if (okAsset?.url) successEmbed.setImage(okAsset.url);
 
             if (isSlash) await interaction.editReply({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
-            else await msg.edit({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
+            else await responseMsg.edit({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
 
         } catch (error) {
             console.error(error);
@@ -129,7 +140,7 @@ module.exports = {
             const badAsset = buildAssetAttachment('wrong');
             if (badAsset?.url) err.setImage(badAsset.url);
             if (isSlash) await interaction.editReply({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [] });
-            else await msg.edit({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [] });
+            else await responseMsg.edit({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [] });
         }
     },
 };

@@ -16,6 +16,18 @@ module.exports = {
         const isSlash = interaction.isChatInputCommand?.();
         const user = isSlash ? interaction.user : interaction.author;
 
+        // Signature check: if interaction is the client, we were called as execute(message, client, args)
+        let mainMsg = interaction;
+        let bot = client;
+        let commandArgs = args;
+
+        if (interaction.isChatInputCommand === undefined && client instanceof Array) {
+            // We are in execute(message, args, client)
+            mainMsg = interaction;
+            commandArgs = client;
+            bot = args;
+        }
+
         let targetUser, reason, deleteMsgs;
 
         if (isSlash) {
@@ -24,19 +36,19 @@ module.exports = {
             deleteMsgs = interaction.options.getBoolean('delete_messages') || false;
         } else {
             // Prefix: !ban @User [Reason]
-            const targetId = args[0]?.replace(/[<@!>]/g, '');
+            const targetId = commandArgs[0]?.replace(/[<@!>]/g, '');
             if (!targetId) {
                 const guide = new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription(`${THEME.ICONS.CROSS} **Usage:** \`!ban @User [Reason]\``);
                 return interaction.reply({ embeds: [guide] });
             }
 
             try {
-                targetUser = await client.users.fetch(targetId);
+                targetUser = await bot.users.fetch(targetId);
             } catch (e) {
                 return interaction.reply({ content: `${THEME.ICONS.CROSS} **Target Lost:** User not found in this sector.`, ephemeral: true });
             }
 
-            reason = args.slice(1).join(' ') || 'Violation of Lunar Protocols';
+            reason = commandArgs.slice(1).join(' ') || 'Violation of Lunar Protocols';
             deleteMsgs = false;
         }
 
@@ -56,7 +68,7 @@ module.exports = {
         }
 
         // --- 2. Pseudo-Animation (The "Moon" Phase) ---
-        let msg;
+        let responseMsg;
         const frames = THEME.ANIMATIONS.EXECUTING_BAN;
 
         const initialEmbed = new EmbedBuilder()
@@ -68,9 +80,9 @@ module.exports = {
 
         if (isSlash) {
             await interaction.reply({ embeds: [initialEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
-            msg = interaction;
+            responseMsg = interaction;
         } else {
-            msg = await interaction.reply({ embeds: [initialEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
+            responseMsg = await interaction.reply({ embeds: [initialEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
         }
 
         // Play Animation
@@ -83,7 +95,7 @@ module.exports = {
             if (loadingAsset?.url) updateEmbed.setImage(loadingAsset.url);
 
             if (isSlash) await interaction.editReply({ embeds: [updateEmbed] });
-            else await msg.edit({ embeds: [updateEmbed] });
+            else await responseMsg.edit({ embeds: [updateEmbed] });
         }
 
         // --- 3. Execution ---
@@ -123,7 +135,7 @@ module.exports = {
             if (okAsset?.url) successEmbed.setImage(okAsset.url);
 
             if (isSlash) await interaction.editReply({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
-            else await msg.edit({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
+            else await responseMsg.edit({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
 
         } catch (error) {
             console.error(error);
@@ -135,7 +147,7 @@ module.exports = {
             if (badAsset?.url) errEmbed.setImage(badAsset.url);
 
             if (isSlash) await interaction.editReply({ embeds: [errEmbed], files: badAsset?.attachment ? [badAsset.attachment] : [] });
-            else await msg.edit({ embeds: [errEmbed], files: badAsset?.attachment ? [badAsset.attachment] : [] });
+            else await responseMsg.edit({ embeds: [errEmbed], files: badAsset?.attachment ? [badAsset.attachment] : [] });
         }
     },
 };

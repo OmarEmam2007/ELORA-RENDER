@@ -193,18 +193,11 @@ setupCloneMusicButtons(client3);
         const { loadPrefixCommands } = require('./handlers/prefixCommandHandler');
         
         // تحميل الأوامر والإيفنتس لكل البوتات لضمان عملها جميعاً
-        const bots = [client1, client2, client3];
-        for (const bot of bots) {
-            // 1. تحميل أوامر البريفكس
-            await loadPrefixCommands(bot);
-            // 2. تحميل أوامر السلاش
-            await loadCommands(bot);
-            // 3. تحميل الإيفنتس
-            await loadEvents(bot);
-        }
-      
-
-        // --- Status Logic for Clones ---
+        await loadPrefixCommands(client1);
+        await loadCommands(client1);
+        await loadEvents(client1);
+        
+        // Clones only get status, no command/event loading to prevent triple replies
         const { ActivityType } = require('discord.js');
         const setBotStatus = (client) => {
             const update = () => {
@@ -224,7 +217,7 @@ setupCloneMusicButtons(client3);
             try {
                 await client.login(token);
                 console.log(`✅ ${name} Logged In`);
-                setBotStatus(client);
+                if (client !== client1) setBotStatus(client);
                 // استراحة 5 ثواني بين كل بوت وبوت
                 await new Promise(resolve => setTimeout(resolve, 5000)); 
             } catch (err) {
