@@ -1,5 +1,7 @@
 const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { checkLink, checkRateLimit } = require('../../utils/securityUtils');
+const { unfurlSocialLink } = require('../../services/socialUnfurlService');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const User = require('../../models/User');
 const ModSettings = require('../../models/ModSettings');
 const ModLog = require('../../models/ModLog');
@@ -31,6 +33,16 @@ module.exports = {
             } catch (_) {
                 // ignore
             }
+        }
+
+        // --- 📱 Social Unfurl (TikTok/Instagram) ---
+        try {
+            const unfurledUrl = await unfurlSocialLink(message.content);
+            if (unfurledUrl) {
+                await message.reply({ content: `🎬 **Video Unfurled:**\n${unfurledUrl}` });
+            }
+        } catch (e) {
+            console.error('[UNFURL] Error:', e);
         }
 
         // --- 🎮 Prefix Commands FIRST (so moderation never breaks commands) ---
@@ -201,6 +213,24 @@ module.exports = {
             }
         } catch (e) {
             console.error('[MODERATION] Error:', e);
+        }
+
+        // --- 🤖 AI Chat / Mention Response ---
+        const botMentioned = message.mentions.has(client.user) || 
+                           (message.reference && (await message.channel.messages.fetch(message.reference.messageId)).author.id === client.user.id);
+        
+        if (botMentioned && !message.author.bot) {
+            try {
+                const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+                
+                const cleanContent = message.content.replace(/<@!?\d+>/g, '').trim();
+                const result = await model.generateContent(`You are Elora, a helpful and friendly digital assistant with a lunar theme. Respond to this message: ${cleanContent}`);
+                const response = await result.response;
+                await message.reply(response.text());
+            } catch (e) {
+                console.error('[AI CHAT] Error:', e);
+            }
         }
 
         // Prefix commands are already handled at the top of this handler.

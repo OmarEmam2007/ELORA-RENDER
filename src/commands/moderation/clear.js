@@ -22,6 +22,17 @@ module.exports = {
         const isSlash = interaction.isChatInputCommand?.();
         const user = isSlash ? interaction.user : interaction.author;
 
+        // Signature check
+        let mainMsg = interaction;
+        let bot = client;
+        let commandArgs = args;
+
+        if (interaction.isChatInputCommand === undefined && client instanceof Array) {
+            mainMsg = interaction;
+            commandArgs = client;
+            bot = args;
+        }
+
         let amount, targetUser, botsOnly, contains;
 
         if (isSlash) {
@@ -31,16 +42,25 @@ module.exports = {
             contains = interaction.options.getString('contains');
         } else {
             // Prefix: !clear [Amount] [Optional: @User]
-            amount = parseInt(args[0]);
+            amount = parseInt(commandArgs[0]);
             if (isNaN(amount) || amount < 1 || amount > 100) {
-                return interaction.reply({
+                return mainMsg.reply({
                     embeds: [new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription(`${THEME.ICONS.CROSS} **Usage:** \`!clear [1-100]\``)]
                 });
+            }
+            
+            // Basic prefix target detection
+            if (commandArgs[1]) {
+                const targetId = commandArgs[1].replace(/[<@!>]/g, '');
+                try {
+                    targetUser = await bot.users.fetch(targetId);
+                } catch (e) {
+                    // ignore
+                }
             }
         }
 
         // --- 2. Pseudo-Animation (Vaporize) ---
-        // For clear, we want it snappy but fancy.
         const initEmbed = new EmbedBuilder()
             .setColor(THEME.COLORS.ACCENT)
             .setDescription('💥 **Preparing Vaporization Beam...**');
@@ -48,19 +68,19 @@ module.exports = {
         const loadingAsset = buildAssetAttachment('loading');
         if (loadingAsset?.url) initEmbed.setImage(loadingAsset.url);
 
-        let msg;
+        let responseMsg;
         if (isSlash) {
-            await interaction.reply({ embeds: [initEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [], ephemeral: true }); // Ephemeral so we don't delete our own log immediately
-            msg = interaction;
+            await mainMsg.reply({ embeds: [initEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [], ephemeral: true });
+            responseMsg = mainMsg;
         } else {
-            msg = await interaction.reply({ embeds: [initEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
+            responseMsg = await mainMsg.reply({ embeds: [initEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
         }
 
         await new Promise(r => setTimeout(r, 1000)); // Charge laser
 
         // --- 3. Execute ---
         try {
-            const channel = interaction.channel;
+            const channel = mainMsg.channel;
             const messages = await channel.messages.fetch({ limit: amount });
 
             let toDelete = messages;
@@ -89,11 +109,10 @@ module.exports = {
             if (okAsset?.url) successEmbed.setImage(okAsset.url);
 
             if (isSlash) {
-                await interaction.editReply({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
+                await mainMsg.editReply({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
             } else {
-                // If prefix, rewrite the loading message to success, then delete it after 3s
-                await msg.edit({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
-                setTimeout(() => msg.delete().catch(() => { }), 3000);
+                await responseMsg.edit({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
+                setTimeout(() => responseMsg.delete().catch(() => { }), 3000);
             }
 
         } catch (error) {
@@ -101,8 +120,8 @@ module.exports = {
             const err = new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription('❌ **Error:** Messages too old or missing.');
             const badAsset = buildAssetAttachment('wrong');
             if (badAsset?.url) err.setImage(badAsset.url);
-            if (isSlash) await interaction.editReply({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [] });
-            else await msg.edit({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [] });
+            if (isSlash) await mainMsg.editReply({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [] });
+            else await responseMsg.edit({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [] });
         }
     },
 };

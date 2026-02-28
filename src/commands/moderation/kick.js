@@ -15,6 +15,17 @@ module.exports = {
         const isSlash = interaction.isChatInputCommand?.();
         const user = isSlash ? interaction.user : interaction.author;
 
+        // Signature check: handle both (interaction, client, args) and (message, args, client)
+        let mainMsg = interaction;
+        let bot = client;
+        let commandArgs = args;
+
+        if (interaction.isChatInputCommand === undefined && client instanceof Array) {
+            mainMsg = interaction;
+            commandArgs = client;
+            bot = args;
+        }
+
         let targetUser, reason;
 
         if (isSlash) {
@@ -22,28 +33,28 @@ module.exports = {
             reason = interaction.options.getString('reason') || 'Minor Infraction';
         } else {
             // Prefix: !kick @User [Reason]
-            const targetId = args[0]?.replace(/[<@!>]/g, '');
+            const targetId = commandArgs[0]?.replace(/[<@!>]/g, '');
             if (!targetId) {
                 const guide = new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription(`${THEME.ICONS.CROSS} **Usage:** \`!kick @User [Reason]\``);
-                return interaction.reply({ embeds: [guide] });
+                return mainMsg.reply({ embeds: [guide] });
             }
 
             try {
-                targetUser = await client.users.fetch(targetId);
+                targetUser = await bot.users.fetch(targetId);
             } catch (e) {
-                return interaction.reply({ content: `${THEME.ICONS.CROSS} **Target Lost:** User not found.`, ephemeral: true });
+                return mainMsg.reply({ content: `${THEME.ICONS.CROSS} **Target Lost:** User not found.`, ephemeral: true });
             }
 
-            reason = args.slice(1).join(' ') || 'Minor Infraction';
+            reason = commandArgs.slice(1).join(' ') || 'Minor Infraction';
         }
 
-        const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+        const member = await mainMsg.guild.members.fetch(targetUser.id).catch(() => null);
 
         if (!member) {
             const err = new EmbedBuilder().setColor(THEME.COLORS.ERROR).setDescription('❌ User is not in this server.');
             const badAsset = buildAssetAttachment('wrong');
             if (badAsset?.url) err.setImage(badAsset.url);
-            return interaction.reply({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [], ephemeral: true });
+            return mainMsg.reply({ embeds: [err], files: badAsset?.attachment ? [badAsset.attachment] : [], ephemeral: true });
         }
 
         const SPECIAL_EXECUTOR_ID = '1380794290350981130';
@@ -69,17 +80,17 @@ module.exports = {
             '💨 Execute.'
         ];
 
-        let msg;
+        let responseMsg;
         const initialEmbed = new EmbedBuilder().setColor(THEME.COLORS.WARNING).setDescription(`${frames[0]}`);
 
         const loadingAsset = buildAssetAttachment('loading');
         if (loadingAsset?.url) initialEmbed.setImage(loadingAsset.url);
 
         if (isSlash) {
-            await interaction.reply({ embeds: [initialEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
-            msg = interaction;
+            await mainMsg.reply({ embeds: [initialEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
+            responseMsg = mainMsg;
         } else {
-            msg = await interaction.reply({ embeds: [initialEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
+            responseMsg = await mainMsg.reply({ embeds: [initialEmbed], files: loadingAsset?.attachment ? [loadingAsset.attachment] : [] });
         }
 
         // Play Animation
@@ -87,13 +98,13 @@ module.exports = {
             await new Promise(r => setTimeout(r, 700));
             const step = new EmbedBuilder().setColor(THEME.COLORS.WARNING).setDescription(`${frames[i]}`);
             if (loadingAsset?.url) step.setImage(loadingAsset.url);
-            if (isSlash) await interaction.editReply({ embeds: [step] });
-            else await msg.edit({ embeds: [step] });
+            if (isSlash) await mainMsg.editReply({ embeds: [step] });
+            else await responseMsg.edit({ embeds: [step] });
         }
 
         // --- 3. Execution ---
         try {
-            await targetUser.send(`👢 **Kicked from ${interaction.guild.name}**\nReason: ${reason}`).catch(() => { });
+            await targetUser.send(`👢 **Kicked from ${mainMsg.guild.name}**\nReason: ${reason}`).catch(() => { });
 
             await member.kick(reason);
 
@@ -114,8 +125,8 @@ module.exports = {
             const okAsset = buildAssetAttachment('ok');
             if (okAsset?.url) successEmbed.setImage(okAsset.url);
 
-            if (isSlash) await interaction.editReply({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
-            else await msg.edit({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
+            if (isSlash) await mainMsg.editReply({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
+            else await responseMsg.edit({ embeds: [successEmbed], files: okAsset?.attachment ? [okAsset.attachment] : [] });
 
         } catch (error) {
             console.error(error);
@@ -126,8 +137,8 @@ module.exports = {
             const badAsset = buildAssetAttachment('wrong');
             if (badAsset?.url) errEmbed.setImage(badAsset.url);
 
-            if (isSlash) await interaction.editReply({ embeds: [errEmbed], files: badAsset?.attachment ? [badAsset.attachment] : [] });
-            else await msg.edit({ embeds: [errEmbed], files: badAsset?.attachment ? [badAsset.attachment] : [] });
+            if (isSlash) await mainMsg.editReply({ embeds: [errEmbed], files: badAsset?.attachment ? [badAsset.attachment] : [] });
+            else await responseMsg.edit({ embeds: [errEmbed], files: badAsset?.attachment ? [badAsset.attachment] : [] });
         }
     },
 };
