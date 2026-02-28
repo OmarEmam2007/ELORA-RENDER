@@ -35,8 +35,8 @@ module.exports = {
             const modSettings = await ModSettings.findOne({ guildId: message.guild.id }).catch(() => null);
 
             // Anti-swear switch (independent from other moderation). Default ON.
+            // IMPORTANT: do not return here; returning would break prefix commands.
             const antiSwearEnabled = modSettings?.antiSwearEnabled !== false;
-            if (!antiSwearEnabled) return;
             
             // Bypass logic: ignore Server Owner and Administrators
             const isServerOwner = message.guild?.ownerId === message.author.id;
@@ -50,7 +50,7 @@ module.exports = {
             );
 
             // ONLY apply if not Owner, not Admin, and not Whitelisted
-            if (!isServerOwner && !isAdministrator && !isWhitelisted) {
+            if (antiSwearEnabled && !isServerOwner && !isAdministrator && !isWhitelisted) {
                 // Hardcoded common terms + DB custom terms
                 const hardcodedBlacklist = ['احا', 'a7a', 'كسمك', 'nigger', 'niga', 'fuck', 'shit'];
                 const customBlacklist = Array.isArray(modSettings?.customBlacklist) ? modSettings.customBlacklist : [];
