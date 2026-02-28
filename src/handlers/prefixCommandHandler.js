@@ -97,8 +97,22 @@ async function handlePrefixCommand(message, client) {
 
     if (!commandName) return;
 
+    // Built-in minimal healthcheck command (does not depend on external command modules)
+    if (commandName === 'ping') {
+        try {
+            return await message.reply('pong');
+        } catch (_) {
+            return;
+        }
+    }
+
     const cmd = client.prefixCommands?.get(commandName);
-    if (!cmd || typeof cmd.execute !== 'function') return;
+    if (!cmd || typeof cmd.execute !== 'function') {
+        if (PREFIX_DEBUG) {
+            console.log(`[PREFIX] command not found: ${commandName}`);
+        }
+        return;
+    }
 
     try {
         if (PREFIX_DEBUG) {
