@@ -41,8 +41,8 @@ module.exports = {
 
             if (detection?.isViolation) {
                     // Fetch modSettings for threshold or use default
-                    let modSettings = await ModSettings.findOne({ guildId: message.guild.id }).catch(() => null);
-                    const threshold = Math.max(2, Math.min(20, Number(modSettings?.antiSwearThreshold || 5)));
+                    const modSettings = await ModSettings.findOne({ guildId: message.guild.id }).catch(() => null);
+                    const threshold = modSettings?.antiSwearThreshold ? Math.max(2, Math.min(20, Number(modSettings.antiSwearThreshold))) : 5;
 
                     // 1) Delete message
                     await message.delete().catch((e) => {
