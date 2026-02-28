@@ -1,8 +1,13 @@
 const profanityList = require('../profanityList');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+let GoogleGenerativeAI = null;
+try {
+    ({ GoogleGenerativeAI } = require('@google/generative-ai'));
+} catch (e) {
+    GoogleGenerativeAI = null;
+}
 
 // Initialize Gemini for context checks if available
-const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
+const genAI = (process.env.GEMINI_API_KEY && GoogleGenerativeAI) ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
 const model = genAI ? genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' }) : null;
 
 /**
