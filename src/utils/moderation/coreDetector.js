@@ -44,8 +44,8 @@ function normalizeText(text) {
         .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
         .replace(/ـ/g, '');
 
-    // 5) Reduce repeated characters (keep 2)
-    normalized = normalized.replace(/(.)\1{2,}/g, '$1$1');
+    // 5) Reduce repeated characters (keep 2) - ONLY for English to avoid breaking Arabic
+    normalized = normalized.replace(/([a-z])\1{2,}/g, '$1$1');
 
     // 6) Keep letters/numbers/spaces; convert other chars to spaces (so boundaries still work)
     normalized = normalized.replace(/[^a-z0-9\s\u0621-\u064Aء]/gi, ' ');
@@ -87,15 +87,16 @@ function tokenize(text) {
 }
 
 function buildWordRegex(term) {
-    // Avoid substring false positives via boundaries:
-    // - English: \b ... \b
-    // - Arabic: boundaries are weaker; we treat spaces/punctuation as boundaries by normalization.
     const t = normalizeText(term);
-    const parts = t.split(/\s+/).filter(Boolean).map(escapeRegex);
+    const parts = t.split(/\s+/).filter(Boolean).map(p => {
+        const escaped = escapeRegex(p);
+        // Allow repeated characters for EVERY character in the word (e.g., "احاااا" matches "احا")
+        return escaped.split('').map(char => `${char}+`).join('');
+    });
     if (!parts.length) return null;
 
-    // allow variable spacing between words
     const body = parts.join('\\s+');
+    // Boundary check using whitespace or start/end of string
     return new RegExp(`(?:^|\\s)(${body})(?=$|\\s)`, 'i');
 }
 
