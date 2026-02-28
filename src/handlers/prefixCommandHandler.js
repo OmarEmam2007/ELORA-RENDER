@@ -19,8 +19,11 @@ async function loadPrefixCommands(client) {
         for (const file of files) {
             try {
                 const command = require(`../commands/${folder}/${file}`);
-                if (command.name) {
-                    client.prefixCommands.set(command.name.toLowerCase(), command);
+                // Support both prefix-style (.name) and slash-style (.data.name)
+                const cmdName = command.name || command.data?.name;
+                
+                if (cmdName) {
+                    client.prefixCommands.set(cmdName.toLowerCase(), command);
                     
                     // Register aliases
                     if (command.aliases && Array.isArray(command.aliases)) {
