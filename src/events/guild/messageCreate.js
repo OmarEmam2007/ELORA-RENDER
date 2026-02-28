@@ -6,6 +6,7 @@ const ModLog = require('../../models/ModLog');
 const { detectProfanitySmart } = require('../../utils/moderation/coreDetector');
 const THEME = require('../../utils/theme');
 const { getGuildLogChannel } = require('../../utils/getGuildLogChannel');
+const { handlePrefixCommand } = require('../../handlers/prefixCommandHandler');
 
 // Global buffer initialization (if not exists)
 if (!global.messageBuffer) global.messageBuffer = [];
@@ -153,6 +154,7 @@ module.exports = {
             console.error('[MODERATION] Error:', e);
         }
 
+<<<<<<< HEAD
         // --- ⌨️ Command Handling (Prefix Commands) ---
         const prefix = client.config.prefix;
         if (!message.content.startsWith(prefix)) return;
@@ -169,6 +171,15 @@ module.exports = {
         } catch (error) {
             console.error(error);
             message.reply('There was an error trying to execute that command!');
+=======
+        // --- 🎮 Prefix Commands (e.g. "elora nick", "elora money") ---
+        try {
+            if (typeof handlePrefixCommand === 'function') {
+                await handlePrefixCommand(message, client);
+            }
+        } catch (e) {
+            console.error('[PREFIX] Error:', e);
+>>>>>>> d96cd51 (Auto Update Sat 02/28/2026 16:52:48.42)
         }
     }
 };

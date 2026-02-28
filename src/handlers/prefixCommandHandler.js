@@ -63,4 +63,35 @@ async function loadPrefixCommands(client) {
     console.log(`✅ Loaded ${client.prefixCommands.size} prefix commands`);
 }
 
-module.exports = { loadPrefixCommands };
+async function handlePrefixCommand(message, client) {
+    if (!message || !client || !message.content) return;
+    const text = String(message.content || '').trim();
+    if (!text) return;
+
+    // Main prefix style: "elora <command> ..."
+    const eloraPrefix = /^elora\s+/i;
+    const legacyPrefix = client?.config?.prefix ? String(client.config.prefix) : null;
+
+    let args = null;
+    if (eloraPrefix.test(text)) {
+        args = text.replace(eloraPrefix, '').trim().split(/\s+/).filter(Boolean);
+    } else if (legacyPrefix && text.startsWith(legacyPrefix)) {
+        args = text.slice(legacyPrefix.length).trim().split(/\s+/).filter(Boolean);
+    } else {
+        return;
+    }
+
+    const commandName = String(args.shift() || '').toLowerCase();
+    if (!commandName) return;
+
+    const cmd = client.prefixCommands?.get(commandName);
+    if (!cmd || typeof cmd.execute !== 'function') return;
+
+    try {
+        await cmd.execute(message, client, args);
+    } catch (e) {
+        console.error(`[PREFIX] Failed executing ${commandName}:`, e);
+    }
+}
+
+module.exports = { loadPrefixCommands, handlePrefixCommand };
