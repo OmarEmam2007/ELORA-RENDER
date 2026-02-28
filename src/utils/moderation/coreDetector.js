@@ -87,15 +87,11 @@ function tokenize(text) {
 }
 
 function buildWordRegex(term) {
+    // Avoid substring false positives via boundaries.
     const t = normalizeText(term);
-    const parts = t.split(/\s+/).filter(Boolean).map(p => {
-        const escaped = escapeRegex(p);
-        // Allow 1 or more occurrences of each character in the word (e.g., "احاااا" matches "احا")
-        return escaped.split('').map(char => `${char}+`).join('');
-    });
+    const parts = t.split(/\s+/).filter(Boolean).map(escapeRegex);
     if (!parts.length) return null;
 
-<<<<<<< HEAD
     // allow variable spacing between words
     let body = parts.join('\\s+');
 
@@ -111,11 +107,6 @@ function buildWordRegex(term) {
     }
 
     return new RegExp(`(?:^|\\s)(${body})(?=$|\\s)`, 'i');
-=======
-    const body = parts.join('[\\s\\.\\-_\\*]*'); // Allow spaces, dots, underscores, dashes, stars between letters
-    // Improved boundary check for Arabic/English/Franco
-    return new RegExp(`(?:^|[^\\w\\u0621-\\u064Aء])(${body})(?=[^\\w\\u0621-\\u064Aء]|$)`, 'i');
->>>>>>> b3e0de26bab4853de900fc4372f5d8cafb95336e
 }
 
 function detectProfanitySmart(content, { extraTerms = [], whitelist = [] } = {}) {
