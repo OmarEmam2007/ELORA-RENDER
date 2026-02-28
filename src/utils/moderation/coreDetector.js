@@ -20,7 +20,6 @@ function normalizeText(text) {
     let normalized = String(text).toLowerCase();
 
     // 2) Normalize common "Franco-Arabic" numerals
-    // Keep both original and converted forms later via detectProfanitySmart; here we convert into letters.
     normalized = normalized
         .replace(/2/g, 'ء')
         .replace(/3/g, 'ع')
@@ -44,11 +43,8 @@ function normalizeText(text) {
         .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
         .replace(/ـ/g, '');
 
-    // 5) Reduce repeated characters to handle elongations
-    // - Latin: keep max 2 ("fuuuuck" -> "fuuck")
-    // - Arabic: collapse repeats to 1 ("منيووووك" -> "منيوك")
+    // 5) Reduce repeated characters (keep 2) - ONLY for English to avoid breaking Arabic
     normalized = normalized.replace(/([a-z])\1{2,}/g, '$1$1');
-    normalized = normalized.replace(/([\u0621-\u064Aء])\1{1,}/g, '$1');
 
     // 6) Keep letters/numbers/spaces; convert other chars to spaces (so boundaries still work)
     normalized = normalized.replace(/[^a-z0-9\s\u0621-\u064Aء]/gi, ' ');
@@ -57,24 +53,35 @@ function normalizeText(text) {
     return normalized;
 }
 
+// Global whitelist for common false positives
+const GLOBAL_WHITELIST = new Set([
+    'warning', 'warnings', 'restart', 'restarts', 'message', 'messages', 'class', 'classes',
+    'assessment', 'assessments', 'assume', 'assumed', 'assuming', 'pass', 'passed', 'passing',
+    'grass', 'glass', 'mass', 'brass', 'compass', 'bass', 'embassy', 'classic', 'classical',
+    'associate', 'association', 'asset', 'assets', 'assignment', 'assign', 'assigned',
+    'hoeing', 'shoe', 'shoes', 'backhoe', 'titans', 'titanic', 'title', 'titled', 'titles',
+    'shitting', 'shifting', 'shirt', 'shirts', 'short', 'shorts', 'shot', 'shots', 'shoot',
+    'sheet', 'sheets', 'shell', 'shells', 'shelf', 'shelves', 'shall', 'shape', 'shapes',
+    'share', 'shared', 'sharing', 'sharp', 'sharply', 'shake', 'shaken', 'shaking',
+    'احلام', 'احلامي', 'احلامك', 'احلامنا', 'احلامكم', 'احلامهم',
+    'احسن', 'احسنت', 'احسنتم', 'احسنا', 'احسنوا', 'احسني',
+    'احساس', 'احاسيس', 'احساسي', 'احساسك', 'احساسنا', 'احساسكم', 'احساسهم',
+    'احمر', 'حمراء', 'حمرة', 'حمار'
+]);
+
 function normalizeTextKeepDigits(text) {
     if (!text) return '';
     let normalized = String(text).toLowerCase();
-
-    // Arabic normalization
     normalized = normalized
         .replace(/[أإآا]/g, 'ا')
         .replace(/[ى]/g, 'ي')
         .replace(/[ة]/g, 'ه')
         .replace(/ؤ/g, 'و')
         .replace(/ئ/g, 'ي');
-
     normalized = normalized
         .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
         .replace(/ـ/g, '');
-
-    normalized = normalized.replace(/([a-z])\1{2,}/g, '$1$1');
-    normalized = normalized.replace(/([\u0621-\u064Aء])\1{1,}/g, '$1');
+    normalized = normalized.replace(/(.)\1{2,}/g, '$1$1');
     normalized = normalized.replace(/[^a-z0-9\s\u0621-\u064Aء]/gi, ' ');
     normalized = normalized.replace(/\s+/g, ' ').trim();
     return normalized;
@@ -91,26 +98,32 @@ function tokenize(text) {
 }
 
 function buildWordRegex(term) {
-    // Avoid substring false positives via boundaries.
     const t = normalizeText(term);
     const parts = t.split(/\s+/).filter(Boolean).map(escapeRegex);
     if (!parts.length) return null;
 
-    // allow variable spacing between words
     let body = parts.join('\\s+');
 
-    // English morphology (safe): allow plural/possessive suffix for single-word alphabetic terms.
-    // Examples: nigger -> niggers, nigger's
     if (parts.length === 1) {
         const rawPart = parts[0];
         const norm = normalizeText(term);
         const isAsciiAlpha = /^[a-z]+$/.test(norm);
-        if (isAsciiAlpha && norm.length >= 4) {
-            body = `${rawPart}(?:s|es|\\'s)?`;
+        
+        if (isAsciiAlpha) {
+            if (norm.length <= 3) {
+                body = `\\b${rawPart}\\b`;
+            } else {
+                const flexibleBody = rawPart.split('').map(char => `${char}+`).join('');
+                body = `\\b${flexibleBody}(?:s|es|\\'s)?\\b`;
+            }
+        } else {
+            body = `(?:^|\\s)(${rawPart})(?=$|\\s)`;
         }
+    } else {
+        body = `(?:^|\\s)(${body})(?=$|\\s)`;
     }
 
-    return new RegExp(`(?:^|\\s)(${body})(?=$|\\s)`, 'i');
+    return new RegExp(body, 'i');
 }
 
 function detectProfanitySmart(content, { extraTerms = [], whitelist = [] } = {}) {
@@ -120,35 +133,33 @@ function detectProfanitySmart(content, { extraTerms = [], whitelist = [] } = {})
     if (!normalized && !normalizedDigits) return { isViolation: false, matches: [] };
 
     const list = [...new Set([...(Array.isArray(profanityList) ? profanityList : []), ...(Array.isArray(extraTerms) ? extraTerms : [])])];
-
-    const wl = new Set((Array.isArray(whitelist) ? whitelist : [])
-        .map(t => normalizeText(t))
-        .filter(Boolean));
+    const wl = new Set((Array.isArray(whitelist) ? whitelist : []).map(t => normalizeText(t)).filter(Boolean));
 
     const matches = [];
     for (const term of list) {
         if (!term || typeof term !== 'string') continue;
-        if (wl.size) {
-            const tNorm = normalizeText(term);
-            if (tNorm && wl.has(tNorm)) continue;
-        }
+        const tNorm = normalizeText(term);
+        if (tNorm && (wl.has(tNorm) || GLOBAL_WHITELIST.has(tNorm))) continue;
+
         const rx = buildWordRegex(term);
         if (!rx) continue;
+
         const hit = rx.exec(normalized) || rx.exec(normalizedDigits);
-        if (hit?.[1]) matches.push(term);
+        if (hit) {
+            const matchedString = (hit[1] || hit[0]).trim();
+            const matchedNorm = normalizeText(matchedString);
+            if (GLOBAL_WHITELIST.has(matchedNorm)) continue;
+            matches.push(term);
+        }
     }
 
     if (!matches.length) return { isViolation: false, matches: [] };
     return { isViolation: true, matches: [...new Set(matches)] };
 }
 
-/**
- * Calculates Levenshtein Distance between two strings
- */
 function levenshteinDistance(s1, s2) {
     if (s1.length < s2.length) return levenshteinDistance(s2, s1);
     if (s2.length === 0) return s1.length;
-
     let previousRow = Array.from({ length: s2.length + 1 }, (_, i) => i);
     for (let i = 0; i < s1.length; i++) {
         let currentRow = [i + 1];
@@ -163,52 +174,25 @@ function levenshteinDistance(s1, s2) {
     return previousRow[s2.length];
 }
 
-/**
- * Check if a word is fuzzy matched against the blacklist
- */
 function getFuzzyMatch(word, blacklist) {
     for (const bad of blacklist) {
-        if (bad.length < 3) continue; // Skip too short words for fuzzy
+        if (bad.length < 3) continue;
         const distance = levenshteinDistance(word, bad);
-        const threshold = Math.floor(bad.length * 0.3); // 30% tolerance
+        const threshold = Math.floor(bad.length * 0.3);
         if (distance <= threshold) return { matched: bad, confidence: 100 - (distance * 10) };
     }
     return null;
 }
 
-/**
- * High-level AI context check
- */
 async function aiContextCheck(text, detectedWords) {
-    if (!model) return { isViolation: true, confidence: 80 }; // Fallback
-
+    if (!model) return { isViolation: true, confidence: 80 };
     try {
-        const prompt = `
-        You are an advanced AI moderator for a Discord server.
-        Analyze the following message for actual harmful intent, severe profanity, or insults.
-        Message: "${text}"
-        Suspected words: ${detectedWords.join(', ')}
-
-        Determine if this is:
-        1. A direct insult or harmful swearing.
-        2. A reference/educational use (e.g., "don't say the word X").
-        3. A false positive.
-
-        Output EXACTLY in this JSON format:
-        {
-            "isViolation": boolean,
-            "confidence": number (0-100),
-            "severity": "Mild" | "Severe" | "Extreme",
-            "reason": "String explaining why"
-        }
-        `;
-
+        const prompt = `Analyze: "${text}" | Suspected: ${detectedWords.join(', ')} | Output JSON: {isViolation: boolean, confidence: number, severity: string, reason: string}`;
         const result = await model.generateContent(prompt);
         const jsonString = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         return JSON.parse(jsonString);
     } catch (e) {
-        console.error('AI Context Check Error:', e);
-        return { isViolation: true, confidence: 70, severity: 'Mild', reason: 'Error in AI check' };
+        return { isViolation: true, confidence: 70, severity: 'Mild', reason: 'Error' };
     }
 }
 
@@ -216,17 +200,13 @@ async function analyzeMessage(messageContent) {
     const rawContent = messageContent;
     const cleanContent = normalizeText(rawContent);
     const words = cleanContent.split(/\s+/);
-
     let matches = [];
     let severityScore = 0;
-
     for (const word of words) {
-        // 1. Direct Match
         if (profanityList.includes(word)) {
             matches.push(word);
             severityScore += 10;
         } else {
-            // 2. Fuzzy Match
             const fuzzy = getFuzzyMatch(word, profanityList);
             if (fuzzy) {
                 matches.push(word);
@@ -234,29 +214,12 @@ async function analyzeMessage(messageContent) {
             }
         }
     }
-
     if (matches.length === 0) return { isViolation: false };
-
-    // 3. Context Check (If matches found)
-    // If severity is low or matches were fuzzy, ask Gemini if it's actually bad
     if (severityScore < 30) {
         const aiResult = await aiContextCheck(rawContent, matches);
-        return {
-            isViolation: aiResult.isViolation,
-            matches: matches,
-            confidence: aiResult.confidence,
-            severity: aiResult.severity,
-            reason: aiResult.reason
-        };
+        return { isViolation: aiResult.isViolation, matches: matches, confidence: aiResult.confidence, severity: aiResult.severity, reason: aiResult.reason };
     }
-
-    return {
-        isViolation: true,
-        matches: matches,
-        confidence: 95,
-        severity: severityScore > 50 ? 'Extreme' : 'Severe',
-        reason: 'Direct word match'
-    };
+    return { isViolation: true, matches: matches, confidence: 95, severity: severityScore > 50 ? 'Extreme' : 'Severe', reason: 'Direct word match' };
 }
 
 module.exports = { analyzeMessage, normalizeText, levenshteinDistance, detectProfanitySmart, tokenize };
