@@ -6,6 +6,31 @@ try {
     GoogleGenerativeAI = null;
 }
 
+// Initialize Gemini for context checks if available
+const genAI = (process.env.GEMINI_API_KEY && GoogleGenerativeAI) ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
+const geminiModelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp';
+const model = genAI ? genAI.getGenerativeModel({ model: geminiModelName }) : null;
+
+const _geminiCache = new Map();
+function _cacheGet(key) {
+    const ttl = Number(process.env.GEMINI_CACHE_TTL_MS || 60000);
+    const hit = _geminiCache.get(key);
+    if (!hit) return null;
+    if (Date.now() - hit.at > ttl) {
+        _geminiCache.delete(key);
+        return null;
+    }
+    return hit.val;
+}
+
+function _cacheSet(key, val) {
+    _geminiCache.set(key, { at: Date.now(), val });
+    if (_geminiCache.size > 500) {
+        const firstKey = _geminiCache.keys().next().value;
+        if (firstKey) _geminiCache.delete(firstKey);
+    }
+}
+
 async function classifyWithGemini(text) {
     if (!model) return { ok: false };
     const raw = String(text || '');
@@ -80,31 +105,6 @@ async function detectProfanityAI(content, { extraTerms = [], whitelist = [] } = 
     return { ...rules, source: 'rules', ai };
 }
 
-// Initialize Gemini for context checks if available
-const genAI = (process.env.GEMINI_API_KEY && GoogleGenerativeAI) ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
-const geminiModelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp';
-const model = genAI ? genAI.getGenerativeModel({ model: geminiModelName }) : null;
-
-const _geminiCache = new Map();
-function _cacheGet(key) {
-    const ttl = Number(process.env.GEMINI_CACHE_TTL_MS || 60000);
-    const hit = _geminiCache.get(key);
-    if (!hit) return null;
-    if (Date.now() - hit.at > ttl) {
-        _geminiCache.delete(key);
-        return null;
-    }
-    return hit.val;
-}
-
-function _cacheSet(key, val) {
-    _geminiCache.set(key, { at: Date.now(), val });
-    if (_geminiCache.size > 500) {
-        const firstKey = _geminiCache.keys().next().value;
-        if (firstKey) _geminiCache.delete(firstKey);
-    }
-}
-
 /**
  * Normalizes text for better detection (Arabic/English)
  */
@@ -119,15 +119,17 @@ function normalizeText(text) {
     normalized = normalized.replace(/([\u0621-\u064Aء])\1{1,}/g, '$1');
 
     // 2) Normalize common "Franco-Arabic" numerals
+    // IMPORTANT: only convert digits when they are used as letters (adjacent to [a-z]).
+    // This prevents false positives for plain numbers like "5" or "55555".
     normalized = normalized
-        .replace(/2/g, 'ء')
-        .replace(/3/g, 'ع')
-        .replace(/4/g, 'ش')
-        .replace(/5/g, 'خ')
-        .replace(/6/g, 'ط')
-        .replace(/7/g, 'ح')
-        .replace(/8/g, 'ق')
-        .replace(/9/g, 'ص');
+        .replace(/(?<=[a-z])2|2(?=[a-z])/g, 'ء')
+        .replace(/(?<=[a-z])3|3(?=[a-z])/g, 'ع')
+        .replace(/(?<=[a-z])4|4(?=[a-z])/g, 'ش')
+        .replace(/(?<=[a-z])5|5(?=[a-z])/g, 'خ')
+        .replace(/(?<=[a-z])6|6(?=[a-z])/g, 'ط')
+        .replace(/(?<=[a-z])7|7(?=[a-z])/g, 'ح')
+        .replace(/(?<=[a-z])8|8(?=[a-z])/g, 'ق')
+        .replace(/(?<=[a-z])9|9(?=[a-z])/g, 'ص');
 
     // 3) Normalize Arabic characters (Alef, Yeh, etc.)
     normalized = normalized
