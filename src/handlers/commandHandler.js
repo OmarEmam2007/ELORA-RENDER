@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 
 async function loadCommands(client) {
+    const { Collection } = require('discord.js');
+    if (!client.commands) client.commands = new Collection();
     let commandsArray = [];
     const folders = fs.readdirSync(path.join(__dirname, '../commands'));
     for (const folder of folders) {

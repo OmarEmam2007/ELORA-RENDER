@@ -44,7 +44,6 @@ module.exports = {
             const modSettings = await ModSettings.findOne({ guildId: message.guild.id }).catch(() => null);
 
             // Anti-swear switch (independent from other moderation). Default ON.
-            // IMPORTANT: do not return here; returning would break prefix commands.
             const antiSwearEnabled = modSettings?.antiSwearEnabled !== false;
             
             // Bypass logic: ignore Server Owner and Administrators
@@ -60,6 +59,13 @@ module.exports = {
 
             // ONLY apply if not Owner, not Admin, and not Whitelisted
             if (antiSwearEnabled && !isServerOwner && !isAdministrator && !isWhitelisted) {
+                // Check if it's a prefix command first to avoid blocking commands that might contain flagged words
+                const text = String(message.content || '').trim();
+                const eloraPrefix = /^elora\s+/i;
+                const legacyPrefix = client?.config?.prefix ? String(client.config.prefix) : null;
+                const bangPrefix = '!';
+                const isCommand = eloraPrefix.test(text) || (legacyPrefix && text.startsWith(legacyPrefix)) || text.startsWith(bangPrefix);
+
                 // Hardcoded common terms + DB custom terms
                 const hardcodedBlacklist = ['احا', 'a7a', 'كسمك', 'nigger', 'niga', 'fuck', 'shit'];
                 const customBlacklist = Array.isArray(modSettings?.customBlacklist) ? modSettings.customBlacklist : [];
@@ -78,71 +84,75 @@ module.exports = {
                 }
 
                 if (detection?.isViolation) {
-                    const threshold = modSettings?.antiSwearThreshold ? Math.max(2, Math.min(20, Number(modSettings.antiSwearThreshold))) : 5;
+                    // If it's a command, we might want to let it pass or handle it differently.
+                    // For now, if it's a command, we WON'T delete it here to let the command handler work.
+                    if (!isCommand) {
+                        const threshold = modSettings?.antiSwearThreshold ? Math.max(2, Math.min(20, Number(modSettings.antiSwearThreshold))) : 5;
 
-                    // 1) Delete message
-                    await message.delete().catch(() => {});
+                        // 1) Delete message
+                        await message.delete().catch(() => {});
 
-                    // Send a temporary public warning (Language-aware)
-                    const detectedWord = (detection.matches || [])[0] || '';
-                    const isArabic = /[\u0600-\u06FF]/.test(detectedWord);
-                    const warnMsg = isArabic 
-                        ? `⚠️ ${message.author}, ممنوع الشتائم في هذا السيرفر!` 
-                        : `⚠️ ${message.author}, Profanity is not allowed in this server!`;
+                        // Send a temporary public warning (Language-aware)
+                        const detectedWord = (detection.matches || [])[0] || '';
+                        const isArabic = /[\u0600-\u06FF]/.test(detectedWord);
+                        const warnMsg = isArabic 
+                            ? `⚠️ ${message.author}, ممنوع الشتائم في هذا السيرفر!` 
+                            : `⚠️ ${message.author}, Profanity is not allowed in this server!`;
 
-                    const publicWarn = await message.channel.send(warnMsg).catch(() => null);
-                    if (publicWarn) {
-                        setTimeout(() => publicWarn.delete().catch(() => {}), 5000);
-                    }
-
-                    // 2) Track warnings
-                    const key = `${message.guild.id}:${message.author.id}`;
-                    let userProfile = await User.findOne({ userId: message.author.id, guildId: message.guild.id }).catch(() => null);
-                    if (!userProfile) userProfile = new User({ userId: message.author.id, guildId: message.guild.id });
-
-                    const prevCount = Number(userProfile.antiSwearWarningsCount || 0);
-                    const nextCount = Math.min(threshold, prevCount + 1);
-                    userProfile.antiSwearWarningsCount = nextCount;
-                    userProfile.antiSwearLastAt = new Date();
-                    await userProfile.save().catch(() => { });
-                    global.antiSwearWarnings.set(key, { count: nextCount, lastAt: Date.now() });
-
-                    // 3) DM user
-                    const warnText = `Your message was removed because it contained prohibited language.\nWarning: ${nextCount}/${threshold}. If you reach ${threshold} warnings, you will be timed out for 1 hour.`;
-                    await message.author.send(warnText).catch(() => { });
-
-                    // 4) Log to log channel
-                    const logChannel = await getGuildLogChannel(message.guild, client);
-                    if (logChannel) {
-                        const embed = new EmbedBuilder()
-                            .setColor(THEME.COLORS.ERROR)
-                            .setTitle('Smart Anti-Swearing')
-                            .setDescription('Blocked a message containing prohibited language.')
-                            .addFields(
-                                { name: 'User', value: `${message.author.tag} (\`${message.author.id}\`)`, inline: true },
-                                { name: 'Channel', value: `${message.channel} (\`${message.channelId}\`)`, inline: true },
-                                { name: 'Warnings', value: `\`${nextCount}/${threshold}\``, inline: true },
-                                { name: 'Detected', value: `\`${(detection.matches || []).slice(0, 10).join(', ') || 'n/a'}\``, inline: false },
-                                { name: 'Message', value: `\`\`\`${String(message.content || '').slice(0, 900)}\`\`\``, inline: false }
-                            )
-                            .setTimestamp();
-                        await logChannel.send({ embeds: [embed] }).catch(() => { });
-                    }
-
-                    // 5) Auto punish at threshold
-                    if (nextCount >= threshold) {
-                        if (message.member?.moderatable) {
-                            await message.member.timeout(60 * 60 * 1000, `Smart Anti-Swearing: ${threshold} warnings`).catch(() => { });
+                        const publicWarn = await message.channel.send(warnMsg).catch(() => null);
+                        if (publicWarn) {
+                            setTimeout(() => publicWarn.delete().catch(() => {}), 5000);
                         }
-                        await User.findOneAndUpdate(
-                            { userId: message.author.id, guildId: message.guild.id },
-                            { antiSwearWarningsCount: 0, antiSwearLastAt: new Date() },
-                            { upsert: true }
-                        ).catch(() => { });
-                        global.antiSwearWarnings.set(key, { count: 0, lastAt: Date.now() });
-                    }
 
-                    return; // Stop processing if it's a violation
+                        // 2) Track warnings
+                        const key = `${message.guild.id}:${message.author.id}`;
+                        let userProfile = await User.findOne({ userId: message.author.id, guildId: message.guild.id }).catch(() => null);
+                        if (!userProfile) userProfile = new User({ userId: message.author.id, guildId: message.guild.id });
+
+                        const prevCount = Number(userProfile.antiSwearWarningsCount || 0);
+                        const nextCount = Math.min(threshold, prevCount + 1);
+                        userProfile.antiSwearWarningsCount = nextCount;
+                        userProfile.antiSwearLastAt = new Date();
+                        await userProfile.save().catch(() => { });
+                        global.antiSwearWarnings.set(key, { count: nextCount, lastAt: Date.now() });
+
+                        // 3) DM user
+                        const warnText = `Your message was removed because it contained prohibited language.\nWarning: ${nextCount}/${threshold}. If you reach ${threshold} warnings, you will be timed out for 1 hour.`;
+                        await message.author.send(warnText).catch(() => { });
+
+                        // 4) Log to log channel
+                        const logChannel = await getGuildLogChannel(message.guild, client);
+                        if (logChannel) {
+                            const embed = new EmbedBuilder()
+                                .setColor(THEME.COLORS.ERROR)
+                                .setTitle('Smart Anti-Swearing')
+                                .setDescription('Blocked a message containing prohibited language.')
+                                .addFields(
+                                    { name: 'User', value: `${message.author.tag} (\`${message.author.id}\`)`, inline: true },
+                                    { name: 'Channel', value: `${message.channel} (\`${message.channelId}\`)`, inline: true },
+                                    { name: 'Warnings', value: `\`${nextCount}/${threshold}\``, inline: true },
+                                    { name: 'Detected', value: `\`${(detection.matches || []).slice(0, 10).join(', ') || 'n/a'}\``, inline: false },
+                                    { name: 'Message', value: `\`\`\`${String(message.content || '').slice(0, 900)}\`\`\``, inline: false }
+                                )
+                                .setTimestamp();
+                            await logChannel.send({ embeds: [embed] }).catch(() => { });
+                        }
+
+                        // 5) Auto punish at threshold
+                        if (nextCount >= threshold) {
+                            if (message.member?.moderatable) {
+                                await message.member.timeout(60 * 60 * 1000, `Smart Anti-Swearing: ${threshold} warnings`).catch(() => { });
+                            }
+                            await User.findOneAndUpdate(
+                                { userId: message.author.id, guildId: message.guild.id },
+                                { antiSwearWarningsCount: 0, antiSwearLastAt: new Date() },
+                                { upsert: true }
+                            ).catch(() => { });
+                            global.antiSwearWarnings.set(key, { count: 0, lastAt: Date.now() });
+                        }
+
+                        return; // Stop processing if it's a violation and NOT a command
+                    }
                 }
             }
         } catch (e) {

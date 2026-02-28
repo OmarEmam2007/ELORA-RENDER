@@ -71,22 +71,29 @@ async function handlePrefixCommand(message, client) {
     const PREFIX_DEBUG = process.env.PREFIX_DEBUG === '1';
 
     // Main prefix style: "elora <command> ..."
-    const eloraPrefix = /^elora\s+/i;
+    const eloraPrefixMatch = text.match(/^elora\s+(.+)/i);
     const legacyPrefix = client?.config?.prefix ? String(client.config.prefix) : null;
     const bangPrefix = '!';
 
     let args = null;
-    if (eloraPrefix.test(text)) {
-        args = text.replace(eloraPrefix, '').trim().split(/\s+/).filter(Boolean);
+    let commandName = null;
+
+    if (eloraPrefixMatch) {
+        args = eloraPrefixMatch[1].trim().split(/\s+/).filter(Boolean);
+        commandName = String(args.shift() || '').toLowerCase();
     } else if (legacyPrefix && text.startsWith(legacyPrefix)) {
-        args = text.slice(legacyPrefix.length).trim().split(/\s+/).filter(Boolean);
+        const content = text.slice(legacyPrefix.length).trim();
+        if (!content) return;
+        args = content.split(/\s+/).filter(Boolean);
+        commandName = String(args.shift() || '').toLowerCase();
     } else if (text.startsWith(bangPrefix)) {
-        args = text.slice(bangPrefix.length).trim().split(/\s+/).filter(Boolean);
+        const content = text.slice(bangPrefix.length).trim();
+        if (!content) return;
+        args = content.split(/\s+/).filter(Boolean);
+        commandName = String(args.shift() || '').toLowerCase();
     } else {
         return;
     }
-
-    const commandName = String(args.shift() || '').toLowerCase();
     if (!commandName) return;
 
     const cmd = client.prefixCommands?.get(commandName);

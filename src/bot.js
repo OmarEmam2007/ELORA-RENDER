@@ -189,17 +189,18 @@ setupCloneMusicButtons(client3);
             console.log('✅ Connected to MongoDB');
         }
 
-// --- Load Handlers ONLY to Main Bot ---
-        
-        // 1. بنحمل أوامر البريفكس الأول
+// --- Load Handlers to All Bots ---
         const { loadPrefixCommands } = require('./handlers/prefixCommandHandler');
-        await loadPrefixCommands(client1);
-
-        // 2. بنحمل أوامر السلاش
-        await loadCommands(client1);
-
-        // 3. آخر حاجة بنشغل الإيفنتس عشان البوت يكون جاهز بالأوامر
-        await loadEvents(client1);
+        
+        // تحميل الأوامر والإيفنتس لكل البوتات لضمان عملها جميعاً
+        for (const client of [client1, client2, client3]) {
+            // 1. تحميل أوامر البريفكس
+            await loadPrefixCommands(client);
+            // 2. تحميل أوامر السلاش
+            await loadCommands(client);
+            // 3. تحميل الإيفنتس
+            await loadEvents(client);
+        }
       
 
         // --- Status Logic for Clones ---
