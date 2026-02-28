@@ -26,29 +26,22 @@ module.exports = {
 
         const ANTISWEAR_DEBUG = process.env.ANTISWEAR_DEBUG === '1';
 
-        // --- 🤖 Smart Anti-Swearing (PRIORITY #1) ---
+        // --- 🤖 Smart Anti-Swearing (PRIORITY #1 - FORCED FOR DEBUG) ---
         try {
-            let modSettings = await ModSettings.findOne({ guildId: message.guild.id }).catch(() => null);
-            const isModLiteEnabled = modSettings?.enabled !== false;
-            
-            const whitelistRoles = Array.isArray(modSettings?.whitelistRoles) ? modSettings.whitelistRoles : [];
-            const whitelistChannels = Array.isArray(modSettings?.whitelistChannels) ? modSettings.whitelistChannels : [];
-            const isWhitelisted = Boolean(
-                (message.channelId && whitelistChannels.includes(message.channelId)) ||
-                (message.member?.roles?.cache && whitelistRoles.some(r => message.member.roles.cache.has(r)))
-            );
+            // FORCE ENABLED REGARDLESS OF DB SETTINGS
+            const hardcodedBlacklist = ['احا', 'a7a', 'كسمك', 'nigger', 'niga', 'fuck', 'shit'];
+            const detection = detectProfanitySmart(message.content, {
+                extraTerms: hardcodedBlacklist,
+                whitelist: []
+            });
 
-            if (isModLiteEnabled && !isWhitelisted) {
-                const detection = detectProfanitySmart(message.content, {
-                    extraTerms: Array.isArray(modSettings?.customBlacklist) ? modSettings.customBlacklist : [],
-                    whitelist: Array.isArray(modSettings?.antiSwearWhitelist) ? modSettings.antiSwearWhitelist : []
-                });
+            if (true) { // Log always during debug
+                console.log(`[ANTISWEAR] Checking: "${message.content}" | Violation: ${detection.isViolation}`);
+            }
 
-                if (ANTISWEAR_DEBUG) {
-                    console.log(`[ANTISWEAR] Content: "${message.content}" | Violation: ${detection.isViolation}`);
-                }
-
-                if (detection?.isViolation) {
+            if (detection?.isViolation) {
+                    // Fetch modSettings for threshold or use default
+                    let modSettings = await ModSettings.findOne({ guildId: message.guild.id }).catch(() => null);
                     const threshold = Math.max(2, Math.min(20, Number(modSettings?.antiSwearThreshold || 5)));
 
                     // 1) Delete message
