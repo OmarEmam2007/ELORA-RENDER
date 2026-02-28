@@ -55,6 +55,19 @@ module.exports = {
 
         const shouldApplyAntiSwear = isModLiteEnabled && !isWhitelisted && !isServerOwner && !isAdministrator;
 
+        if (ANTISWEAR_DEBUG) {
+            console.log('[ANTISWEAR] gates=', {
+                enabled: isModLiteEnabled,
+                isWhitelisted,
+                isServerOwner,
+                isAdministrator,
+                shouldApplyAntiSwear,
+                threshold: Number(modSettings?.antiSwearThreshold || 5),
+                whitelistCount: Array.isArray(modSettings?.antiSwearWhitelist) ? modSettings.antiSwearWhitelist.length : 0,
+                customBlacklistCount: Array.isArray(modSettings?.customBlacklist) ? modSettings.customBlacklist.length : 0,
+            });
+        }
+
         if (shouldApplyAntiSwear) {
             try {
                 const detection = detectProfanitySmart(message.content, {
@@ -67,7 +80,9 @@ module.exports = {
                 if (detection?.isViolation) {
                     const threshold = Math.max(2, Math.min(20, Number(modSettings?.antiSwearThreshold || 5)));
 
-                    await message.delete().catch(() => { });
+                    await message.delete().catch((e) => {
+                        if (ANTISWEAR_DEBUG) console.log('[ANTISWEAR] delete failed:', e?.message || e);
+                    });
 
                     const key = `${message.guild.id}:${message.author.id}`;
                     let userProfile = await User.findOne({ userId: message.author.id, guildId: message.guild.id }).catch(() => null);
