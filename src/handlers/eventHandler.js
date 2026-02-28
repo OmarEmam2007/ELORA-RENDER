@@ -9,14 +9,14 @@ async function loadEvents(client) {
             const event = require(`../events/${folder}/${file}`);
             if (event.rest) {
                 if (event.once)
-                    client.rest.once(event.name, (...args) => event.execute(...args, client));
+                    client.rest.once(event.name, (...args) => event.execute(...args));
                 else
-                    client.rest.on(event.name, (...args) => event.execute(...args, client));
+                    client.rest.on(event.name, (...args) => event.execute(...args));
             } else {
                 if (event.once)
-                    client.once(event.name, (...args) => event.execute(...args, client));
+                    client.once(event.name, (...args) => event.execute(...args));
                 else
-                    client.on(event.name, (...args) => event.execute(...args, client));
+                    client.on(event.name, (...args) => event.execute(...args));
             }
         }
     }
