@@ -9,7 +9,21 @@ module.exports = {
     name: 'messageUpdate',
     async execute(oldMessage, newMessage, client) {
         if (!oldMessage.author || oldMessage.author.bot) return;
-        if (oldMessage.content === newMessage.content) return; // Only process content changes
+        // Fetch full message if partial (edits often arrive partial depending on cache/intents)
+        try {
+            if (newMessage?.partial) {
+                newMessage = await newMessage.fetch().catch(() => newMessage);
+            }
+            if (oldMessage?.partial) {
+                oldMessage = await oldMessage.fetch().catch(() => oldMessage);
+            }
+        } catch (e) {
+            // best-effort
+        }
+
+        const oldContent = String(oldMessage?.content || '');
+        const newContent = String(newMessage?.content || '');
+        if (oldContent === newContent) return; // Only process content changes
 
         const ANTISWEAR_DEBUG = process.env.ANTISWEAR_DEBUG === '1';
 
@@ -52,7 +66,8 @@ module.exports = {
             }
 
             if (shouldApplyAntiSwear) {
-                const detection = detectProfanitySmart(newMessage.content, {
+                if (!newContent) return;
+                const detection = detectProfanitySmart(newContent, {
                     extraTerms: Array.isArray(modSettings?.customBlacklist) ? modSettings.customBlacklist : [],
                     whitelist: Array.isArray(modSettings?.antiSwearWhitelist) ? modSettings.antiSwearWhitelist : []
                 });

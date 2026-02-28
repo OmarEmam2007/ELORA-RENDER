@@ -19,6 +19,10 @@ function normalizeText(text) {
     // 1) Convert to lowercase
     let normalized = String(text).toLowerCase();
 
+    // 1.5) Collapse elongated letters early (helps Franco like a7aaaaaaaa)
+    normalized = normalized.replace(/([a-z])\1{1,}/g, '$1');
+    normalized = normalized.replace(/([\u0621-\u064Aء])\1{1,}/g, '$1');
+
     // 2) Normalize common "Franco-Arabic" numerals
     normalized = normalized
         .replace(/2/g, 'ء')
@@ -43,8 +47,11 @@ function normalizeText(text) {
         .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
         .replace(/ـ/g, '');
 
-    // 5) Reduce repeated characters (keep 2) - ONLY for English to avoid breaking Arabic
-    normalized = normalized.replace(/([a-z])\1{2,}/g, '$1$1');
+    // 5) Reduce repeated characters to handle elongations
+    // - Latin: collapse repeats to 1 ("fuuuuuck" -> "fuck")
+    // - Arabic: collapse repeats to 1 ("منيووووك" -> "منيوك")
+    normalized = normalized.replace(/([a-z])\1{1,}/g, '$1');
+    normalized = normalized.replace(/([\u0621-\u064Aء])\1{1,}/g, '$1');
 
     // 6) Keep letters/numbers/spaces; convert other chars to spaces (so boundaries still work)
     normalized = normalized.replace(/[^a-z0-9\s\u0621-\u064Aء]/gi, ' ');
@@ -81,7 +88,10 @@ function normalizeTextKeepDigits(text) {
     normalized = normalized
         .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
         .replace(/ـ/g, '');
-    normalized = normalized.replace(/(.)\1{2,}/g, '$1$1');
+
+    // Handle elongations (same as normalizeText)
+    normalized = normalized.replace(/([a-z])\1{1,}/g, '$1');
+    normalized = normalized.replace(/([\u0621-\u064Aء])\1{1,}/g, '$1');
     normalized = normalized.replace(/[^a-z0-9\s\u0621-\u064Aء]/gi, ' ');
     normalized = normalized.replace(/\s+/g, ' ').trim();
     return normalized;
