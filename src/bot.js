@@ -251,49 +251,53 @@ process.on('uncaughtException', (error) => {
 // under src/events/guild/ with clear ordering and guardrails.
 // --- نظام التواصل الخاص (DM Bridge) ---
 
-// إعدادات الـ IDs (استبدلها بالأرقام الصحيحة الخاصة بك)
-const BRIDGE_CONFIG = {
-    SOURCE_CHANNEL_ID: '1477679223920656585', // ايدي القناة في السيرفر
-    TARGET_USER_ID: '1085496418745200730'     // ايدي الشخص اللي هيستلم في الخاص
-};
+// --- نظام ModMail (الرد التلقائي) ---
+
+const MODMAIL_CHANNEL_ID = '123456789012345678'; // ايدي القناة اللي هتستلم فيها الرسايل
 
 client1.on('messageCreate', async (message) => {
-    // تجاهل رسائل البوتات
     if (message.author.bot) return;
 
-    // 1. من السيرفر للخاص: لو كتبت في القناة المحددة، البوت يبعت للشخص
-    if (message.channel.id === BRIDGE_CONFIG.SOURCE_CHANNEL_ID) {
+    // 1. من الخاص (DM) -> إلى القناة في السيرفر
+    if (message.channel.type === 1 || !message.guild) {
         try {
-            const targetUser = await client1.users.fetch(BRIDGE_CONFIG.TARGET_USER_ID);
-            if (targetUser) {
-                await targetUser.send(`**وصلتك رسالة جديدة:**\n${message.content}`);
-                await message.react('✅'); // تأكيد الإرسال
+            const channel = await client1.channels.fetch(MODMAIL_CHANNEL_ID);
+            if (channel) {
+                const embed = new EmbedBuilder()
+                    .setAuthor({ name: `رسالة من: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
+                    .setDescription(message.content)
+                    .setColor('#00ff00')
+                    .setTimestamp()
+                    // بنخزن ايدي الشخص في الفوتر عشان لما تعمل ريبلاي نعرف نرد عليه
+                    .setFooter({ text: `User ID: ${message.author.id}` });
+
+                await channel.send({ embeds: [embed] });
             }
         } catch (error) {
-            console.error('❌ فشل إرسال الرسالة للخاص:', error);
-            message.reply('⚠️ لم أتمكن من إرسال الرسالة، ربما المستخدم أغلق الخاص (DM).');
+            console.error('❌ فشل تحويل رسالة الخاص للقناة:', error);
         }
     }
 
-    // 2. من الخاص للسيرفر: لو الشخص رد على البوت في الخاص، الرسالة تظهر في القناة
-    if (message.channel.type === 1) { // 1 تعني DMChannel
-        // نتحقق أن المرسل هو الشخص المستهدف
-        if (message.author.id === BRIDGE_CONFIG.TARGET_USER_ID) {
-            try {
-                const sourceChannel = await client1.channels.fetch(BRIDGE_CONFIG.SOURCE_CHANNEL_ID);
-                if (sourceChannel) {
-                    const embed = new EmbedBuilder()
-                        .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
-                        .setDescription(message.content)
-                        .setColor('#00ff00')
-                        .setTimestamp()
-                        .setFooter({ text: 'رد جديد من الخاص' });
-
-                    await sourceChannel.send({ embeds: [embed] });
+    // 2. من القناة (Reply) -> إلى الخاص بتاع المستخدم
+    if (message.channel.id === MODMAIL_CHANNEL_ID && message.reference) {
+        try {
+            // هنجيب الرسالة اللي أنت عملت عليها ريبلاي
+            const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
+            
+            // نطلع ايدي الشخص من الـ Embed اللي البوت بعته قبل كدة
+            const footerText = repliedMessage.embeds[0]?.footer?.text;
+            if (footerText && footerText.startsWith('User ID: ')) {
+                const userId = footerText.replace('User ID: ', '');
+                const targetUser = await client1.users.fetch(userId);
+                
+                if (targetUser) {
+                    await targetUser.send(message.content);
+                    await message.react('✉️'); // علامة إنه اتبعتت للشخص
                 }
-            } catch (error) {
-                console.error('❌ فشل إعادة توجيه الرسالة للقناة:', error);
             }
+        } catch (error) {
+            console.error('❌ فشل الرد على المستخدم:', error);
+            message.reply('⚠️ مش عارف أرد على الشخص ده، ممكن قافل الخاص أو الـ Embed ممسوح.');
         }
     }
 });
