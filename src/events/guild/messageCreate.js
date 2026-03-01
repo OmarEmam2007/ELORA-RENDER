@@ -3,6 +3,7 @@ const { checkLink, checkRateLimit } = require('../../utils/securityUtils');
 const { unfurlSocialLink } = require('../../services/socialUnfurlService');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const User = require('../../models/User');
+const CustomReply = require('../../models/CustomReply');
 const ModSettings = require('../../models/ModSettings');
 const ModLog = require('../../models/ModLog');
 const { detectProfanitySmart, detectProfanityHybrid, detectProfanityAI } = require('../../utils/moderation/coreDetector');
@@ -46,7 +47,7 @@ module.exports = {
             console.error('[UNFURL] Error:', e);
         }
 
-        // --- AI Chat / Mention Response ---
+        // --- 🤖 AI Chat / Mention Response ---
         let isReplyToBot = false;
         if (message.reference?.messageId) {
             try {
@@ -64,23 +65,47 @@ module.exports = {
 
             // Static replies first (no AI key required)
             if (cleanContent.includes('i love you') || cleanContent.includes('love you') || cleanContent.includes('بحبك')) {
-                return await message.reply('I love you too ');
+                return await message.reply('بحبك أكتر يا قلبي ❤️');
             }
 
             // Optional AI fallback (only if key exists)
-            if (!process.env.GEMINI_API_KEY) return;
-            try {
-                const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-                const chatModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+            if (process.env.GEMINI_API_KEY) {
+                try {
+                    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+                    const chatModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
-                if (cleanContent.length > 0) {
-                    const result = await chatModel.generateContent(`You are Elora, a helpful and friendly digital assistant with a lunar theme. Respond to this message: ${cleanContent}`);
-                    const response = await result.response;
-                    return await message.reply(response.text());
+                    if (cleanContent.length > 0) {
+                        const result = await chatModel.generateContent(`You are Elora, a helpful and friendly digital assistant with a lunar theme. Respond to this message: ${cleanContent}`);
+                        const response = await result.response;
+                        return await message.reply(response.text());
+                    }
+                } catch (e) {
+                    console.error('[AI CHAT] Error:', e);
                 }
-            } catch (e) {
-                console.error('[AI CHAT] Error:', e);
             }
+        }
+
+        // --- 🧠 Custom Auto-Replies ---
+        try {
+            const customReplies = await CustomReply.find({ guildId: message.guild.id, enabled: true }).catch(() => []);
+            const triggerText = message.content.trim().toLowerCase();
+            
+            for (const cr of customReplies) {
+                const trigger = cr.trigger.toLowerCase();
+                let isMatch = false;
+                
+                if (cr.matchType === 'startsWith') {
+                    isMatch = triggerText.startsWith(trigger);
+                } else {
+                    isMatch = triggerText === trigger;
+                }
+                
+                if (isMatch) {
+                    return await message.reply(cr.reply);
+                }
+            }
+        } catch (e) {
+            console.error('[CUSTOM REPLIES] Error:', e);
         }
 
         // --- 🎮 Prefix Commands (e.g. "elora nick", "elora money") ---
@@ -235,6 +260,36 @@ module.exports = {
             const entry = `${message.author.username}: ${message.content}`;
             global.messageBuffer.push(entry);
             if (global.messageBuffer.length > 50) global.messageBuffer.shift();
+        }
+
+        // --- 📈 Chat Leveling System (XP) ---
+        try {
+            const now = Date.now();
+            let profile = await User.findOne({ userId: message.author.id, guildId: message.guild.id }).catch(() => null);
+            if (!profile) {
+                profile = new User({ userId: message.author.id, guildId: message.guild.id });
+            }
+
+            // XP Cooldown (1 minute)
+            const lastXP = profile.lastMessageTimestamp || 0;
+            if (now - lastXP > 60000) {
+                const xpGain = Math.floor(Math.random() * 10) + 15; // 15-25 XP
+                profile.xp = (profile.xp || 0) + xpGain;
+                profile.lastMessageTimestamp = now;
+
+                // Level up: level * 100 XP
+                let needed = (profile.level || 1) * 100;
+                if (profile.xp >= needed) {
+                    profile.xp -= needed;
+                    profile.level = (profile.level || 1) + 1;
+                    
+                    // Optional: Level up notification (you can customize this)
+                    // await message.reply(`🎉 **Level Up!** You reached level **${profile.level}**!`).catch(() => {});
+                }
+                await profile.save().catch(() => {});
+            }
+        } catch (e) {
+            console.error('[LEVELING] Error:', e);
         }
 
         // Prefix commands are already handled.

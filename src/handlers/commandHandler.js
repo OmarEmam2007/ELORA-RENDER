@@ -57,36 +57,24 @@ async function loadCommands(client) {
 
     client.on('ready', async () => {
         try {
-            // Only the main bot should register slash commands.
-            // Clones may not have config/application initialized the same way and can crash here.
-            if (!client?.config) {
-                return;
-            }
+            if (!client?.application) return;
 
-            // Allow overriding guildId from environment (e.g. Hugging Face secrets)
-            const envGuildId = process.env.GUILD_ID;
-            const guildId = envGuildId || client.config.guildId;
+            const guildId = process.env.GUILD_ID || client.config?.guildId;
 
             if (guildId) {
-                // INSTANT UPDATE (Guild specific if found), with global fallback
                 const guild = client.guilds.cache.get(guildId);
                 if (guild) {
-                    // 1. Register commands to the GUILD (Instant)
+                    // 1. Register to GUILD (Instant for development/primary server)
                     await registerGuildCommandsSafely(guild);
-
-                    // 2. WIPE Global Commands to prevent duplicates
-                    await client.application.commands.set([]);
-                    console.log('🗑️ Global commands wiped (to prevent duplicates)');
-                } else {
-                    console.warn(`⚠️ Guild ID ${guildId} provided but not found in cache. Falling back to global registration.`);
-                    await client.application.commands.set(commandsArray);
-                    console.log('✅ Slash Commands Registered Globally (Fallback - may take up to 1 hour)');
+                    console.log(`✅ Slash Commands Registered to Guild: ${guild.name}`);
                 }
-            } else {
-                // SLOW UPDATE (Global - up to 1 hour)
-                await client.application.commands.set(commandsArray);
-                console.log('✅ Slash Commands Registered Globally (May take 1 hour to appear)');
             }
+
+            // 2. Always register GLOBALLY (Standard for production, takes ~1 hour to propagate)
+            // We NO LONGER wipe global commands set([]).
+            await client.application.commands.set(commandsArray);
+            console.log('✅ Slash Commands Registered Globally');
+            
         } catch (error) {
             console.error('❌ Error registering slash commands:', error);
         }
