@@ -254,7 +254,7 @@ process.on('uncaughtException', (error) => {
 // إعدادات الـ IDs (استبدلها بالأرقام الصحيحة الخاصة بك)
 const BRIDGE_CONFIG = {
     SOURCE_CHANNEL_ID: '1477679223920656585', // ايدي القناة في السيرفر
-    TARGET_USER_ID: '1476148590270222429'     // ايدي الشخص اللي هيستلم في الخاص
+    TARGET_USER_ID: '1085496418745200730'     // ايدي الشخص اللي هيستلم في الخاص
 };
 
 client1.on('messageCreate', async (message) => {
