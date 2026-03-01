@@ -230,181 +230,6 @@ setupCloneMusicButtons(client3);
         await loginBot(client2, process.env.TOKEN_2, 'Clone 1');
         await loginBot(client3, process.env.TOKEN_3, 'Clone 2');
 
-        // --- 🌀 The Hallucination Channel (Hourly Chronicle) ---
-        // const cron = require('node-cron');
-        // const { generateChronicle } = require('./nexus/gemini');
-
-        // Run every hour (0 * * * * = at minute 0 of every hour)
-        // cron.schedule('0 * * * *', async () => {
-        //     try {
-        //         console.log('📜 Nexus Chronicle: Generating...');
-
-        //         if (!global.messageBuffer || global.messageBuffer.length === 0) {
-        //             console.log('⚠️ No messages to chronicle.');
-        //             return;
-        //         }
-
-        //         // Generate the Chronicle
-        //         const chronicle = await generateChronicle(global.messageBuffer);
-
-        //         // Find the Welcome Channel by ID
-        //         const guild = client1.guilds.cache.first();
-        //         if (!guild) return;
-
-        //         const channel = guild.channels.cache.get('1461484367728869397');
-
-        //         if (!channel) {
-        //             console.log('⚠️ Welcome channel not found.');
-        //             return;
-        //         }
-
-        //         // Send the Chronicle
-        //         await channel.send({
-        //             content: `## 📜 The Chronicle of ${new Date().toLocaleTimeString()}\n\n${chronicle}`
-        //         });
-
-        //         console.log('✅ Chronicle posted.');
-
-        //         // Clear the buffer after posting
-        //         global.messageBuffer = [];
-
-        //     } catch (error) {
-        //         console.error('❌ Chronicle Error:', error);
-        //     }
-        // });
-
-        // console.log('🌀 Hallucination Channel: Active (Hourly)');
-
-        // console.log('🌀 Hallucination Channel: Active (Hourly)');
-
-        // --- 🔔 Dynamic Auto-Bump Reminder System ---
-        const Bump = require('./models/Bump');
-        const checkBumps = async () => {
-            try {
-                const guilds = client1.guilds.cache;
-                for (const [guildId, guild] of guilds) {
-                    const bumpData = await Bump.findOne({ guildId: guildId, reminded: false });
-                    if (bumpData && Date.now() >= bumpData.nextBumpTime.getTime()) {
-                        const bumpChannel = guild.channels.cache.get('1461760293968285879') || guild.channels.cache.find(c => c.name.includes('bump'));
-                        if (!bumpChannel) continue;
-
-                        const { EmbedBuilder } = require('discord.js');
-                        const embed = new EmbedBuilder()
-                            .setTitle('✨ Server Growth Protocol')
-                            .setDescription('```ansi\n\u001b[1;36m╔═══════════════════════════════╗\n║   🚀 READY TO BUMP! 🚀       ║\n╚═══════════════════════════════╝\u001b[0m\n```\nIt has been **2 hours** since the last successful bump. Use `/bump` now to boost our community visibility!')
-                            .addFields(
-                                { name: '📍 Command', value: '`/bump`', inline: true },
-                                { name: '📡 Provider', value: '`Disboard.org`', inline: true }
-                            )
-                            .setColor('#00ffd5')
-                            .setImage('https://i.imgur.com/8N4Y8Q9.png') // Optional placeholder for a sleek banner
-                            .setFooter({ text: 'Sovereign Nexus • Growth Systems', iconURL: client1.user.displayAvatarURL() })
-                            .setTimestamp();
-
-                        await bumpChannel.send({
-                            content: '## 🔔 Time to Bump!',
-                            embeds: [embed]
-                        });
-
-                        bumpData.reminded = true;
-                        await bumpData.save();
-                        console.log(`✅ Dynamic Bump reminder sent for ${guild.name}`);
-                    }
-                }
-            } catch (error) {
-                console.error('❌ Dynamic Bump Error:', error);
-            }
-        };
-
-        // Check every 30 seconds
-        setInterval(checkBumps, 30 * 1000);
-        console.log('🔔 Dynamic Bump Reminder System: Active (Real-time Detection)');
-
-        // --- 🌙 LIFE SIM DAILY CYCLE (24h Automation) ---
-        const cron = require('node-cron');
-        const LifeSimService = require('./services/lifeSimService');
-        const lifeSimService = new LifeSimService(client1);
-        const { EmbedBuilder } = require('discord.js');
-        const THEME = require('./utils/theme');
-
-        // Run daily at midnight UTC (adjust timezone as needed)
-        cron.schedule('0 0 * * *', async () => {
-            try {
-                console.log('🌙 Life Sim: Starting daily cycle...');
-
-                const guilds = client1.guilds.cache;
-                for (const [guildId, guild] of guilds) {
-                    try {
-                        const results = await lifeSimService.runDailyCycle(guildId);
-                        const config = lifeSimService.getConfig();
-
-                        // Send logs to life-sim-logs channel
-                        const logChannel = guild.channels.cache.get(config.channels.LIFE_SIM_LOGS);
-                        if (logChannel) {
-                            const logEmbed = new EmbedBuilder()
-                                .setColor(THEME.COLORS.ACCENT)
-                                .setAuthor({ name: '🌙 Daily Cycle Report' })
-                                .setDescription(
-                                    `**Passive Income Paid:** ${results.passiveIncomePaid.toLocaleString()} coins\n` +
-                                    `**Taxes Collected:** ${results.taxesCollected.toLocaleString()} coins\n` +
-                                    `**Repossessions:** ${results.repossessions.length}\n\n` +
-                                    `${results.errors.length > 0 ? `**Errors:** ${results.errors.length}` : '✅ No errors'}`
-                                )
-                                .setTimestamp();
-
-                            if (results.repossessions.length > 0) {
-                                const reposList = results.repossessions.slice(0, 10).map(r => 
-                                    `${r.type === 'property' ? '🏠' : '🚗'} ${r.id} - ${r.reason}`
-                                ).join('\n');
-                                logEmbed.addFields({
-                                    name: 'Repossessions',
-                                    value: reposList.length > 0 ? reposList : 'None',
-                                    inline: false
-                                });
-                            }
-
-                            await logChannel.send({ embeds: [logEmbed] });
-                        }
-
-                        // Announce major repossessions in city-hall
-                        if (results.repossessions.length > 0) {
-                            const cityHall = guild.channels.cache.get(config.channels.CITY_HALL);
-                            if (cityHall) {
-                                const majorRepos = results.repossessions.filter(r => 
-                                    r.type === 'property' || r.type === 'vehicle'
-                                );
-
-                                if (majorRepos.length > 0) {
-                                    for (const repo of majorRepos.slice(0, 3)) { // Max 3 announcements
-                                        const announcement = new EmbedBuilder()
-                                            .setColor(THEME.COLORS.ERROR)
-                                            .setAuthor({ name: '🏛️ City Announcement' })
-                                            .setDescription(
-                                                `**Foreclosure Notice**\n\n` +
-                                                `${repo.type === 'property' ? '🏠 Property' : '🚗 Vehicle'} **${repo.id}** has been repossessed.\n` +
-                                                `Reason: ${repo.reason}`
-                                            )
-                                            .setTimestamp();
-                                        await cityHall.send({ embeds: [announcement] });
-                                    }
-                                }
-                            }
-                        }
-
-                        console.log(`✅ Life Sim daily cycle completed for ${guild.name}`);
-                    } catch (guildError) {
-                        console.error(`❌ Life Sim error for guild ${guild.name}:`, guildError);
-                    }
-                }
-
-                console.log('✅ Life Sim: Daily cycle completed for all guilds');
-            } catch (error) {
-                console.error('❌ Life Sim Daily Cycle Error:', error);
-            }
-        });
-
-        console.log('🌙 Life Sim Daily Cycle: Active (Runs daily at midnight UTC)');
-
     } catch (error) {
         console.error('❌ Error starting swarm:', error);
     }
@@ -424,5 +249,52 @@ process.on('uncaughtException', (error) => {
 // and can cause moderation logic to appear "not working" due to duplicated/side-effect handlers.
 // If you still need these features, we should move them into dedicated event modules
 // under src/events/guild/ with clear ordering and guardrails.
+// --- نظام التواصل الخاص (DM Bridge) ---
 
+// إعدادات الـ IDs (استبدلها بالأرقام الصحيحة الخاصة بك)
+const BRIDGE_CONFIG = {
+    SOURCE_CHANNEL_ID: '1477679223920656585', // ايدي القناة في السيرفر
+    TARGET_USER_ID: '1476148590270222429'     // ايدي الشخص اللي هيستلم في الخاص
+};
+
+client1.on('messageCreate', async (message) => {
+    // تجاهل رسائل البوتات
+    if (message.author.bot) return;
+
+    // 1. من السيرفر للخاص: لو كتبت في القناة المحددة، البوت يبعت للشخص
+    if (message.channel.id === BRIDGE_CONFIG.SOURCE_CHANNEL_ID) {
+        try {
+            const targetUser = await client1.users.fetch(BRIDGE_CONFIG.TARGET_USER_ID);
+            if (targetUser) {
+                await targetUser.send(`**وصلتك رسالة جديدة:**\n${message.content}`);
+                await message.react('✅'); // تأكيد الإرسال
+            }
+        } catch (error) {
+            console.error('❌ فشل إرسال الرسالة للخاص:', error);
+            message.reply('⚠️ لم أتمكن من إرسال الرسالة، ربما المستخدم أغلق الخاص (DM).');
+        }
+    }
+
+    // 2. من الخاص للسيرفر: لو الشخص رد على البوت في الخاص، الرسالة تظهر في القناة
+    if (message.channel.type === 1) { // 1 تعني DMChannel
+        // نتحقق أن المرسل هو الشخص المستهدف
+        if (message.author.id === BRIDGE_CONFIG.TARGET_USER_ID) {
+            try {
+                const sourceChannel = await client1.channels.fetch(BRIDGE_CONFIG.SOURCE_CHANNEL_ID);
+                if (sourceChannel) {
+                    const embed = new EmbedBuilder()
+                        .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
+                        .setDescription(message.content)
+                        .setColor('#00ff00')
+                        .setTimestamp()
+                        .setFooter({ text: 'رد جديد من الخاص' });
+
+                    await sourceChannel.send({ embeds: [embed] });
+                }
+            } catch (error) {
+                console.error('❌ فشل إعادة توجيه الرسالة للقناة:', error);
+            }
+        }
+    }
+});
 module.exports = client1; // Export main client for compatibility
