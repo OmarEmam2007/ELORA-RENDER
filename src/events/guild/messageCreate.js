@@ -35,26 +35,44 @@ module.exports = {
             }
         }
 
-        // --- 📱 Social Unfurl (TikTok/Instagram) ---
+        // --- Social Unfurl (TikTok/Instagram) ---
         try {
             const unfurledUrl = await unfurlSocialLink(message.content);
             if (unfurledUrl) {
-                await message.reply({ content: `🎬 **Video Unfurled:**\n${unfurledUrl}` });
+                await message.reply({ content: ` **Video Unfurled:**\n${unfurledUrl}` });
+                return;
             }
         } catch (e) {
             console.error('[UNFURL] Error:', e);
         }
 
-        // --- 🤖 AI Chat / Mention Response ---
-        const botMentioned = message.mentions.has(client.user) || 
-                           (message.reference && (await message.channel.messages.fetch(message.reference.messageId)).author.id === client.user.id);
-        
+        // --- AI Chat / Mention Response ---
+        let isReplyToBot = false;
+        if (message.reference?.messageId) {
+            try {
+                const refMsg = await message.channel.messages.fetch(message.reference.messageId).catch(() => null);
+                isReplyToBot = Boolean(refMsg && refMsg.author?.id === client.user.id);
+            } catch (_) {
+                isReplyToBot = false;
+            }
+        }
+
+        const botMentioned = Boolean(message.mentions?.users?.has(client.user.id)) || isReplyToBot;
+
         if (botMentioned && !message.author.bot) {
+            const cleanContent = String(message.content || '').replace(/<@!?\d+>/g, '').trim().toLowerCase();
+
+            // Static replies first (no AI key required)
+            if (cleanContent.includes('i love you') || cleanContent.includes('love you') || cleanContent.includes('بحبك')) {
+                return await message.reply('I love you too ');
+            }
+
+            // Optional AI fallback (only if key exists)
+            if (!process.env.GEMINI_API_KEY) return;
             try {
                 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
                 const chatModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-                
-                const cleanContent = message.content.replace(/<@!?\d+>/g, '').trim();
+
                 if (cleanContent.length > 0) {
                     const result = await chatModel.generateContent(`You are Elora, a helpful and friendly digital assistant with a lunar theme. Respond to this message: ${cleanContent}`);
                     const response = await result.response;

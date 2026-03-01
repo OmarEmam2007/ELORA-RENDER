@@ -1,19 +1,22 @@
-const axios = require('axios');
-
 async function unfurlSocialLink(content) {
-    // 1. Instagram / Reels -> ddinstagram
-    const instaRegex = /(https?:\/\/(www\.)?instagram\.com\/(reels?|p|tv)\/[a-zA-Z0-9_-]+)/gi;
-    const instaMatch = content.match(instaRegex);
-    if (instaMatch) {
-        return instaMatch[0].replace(/instagram\.com/i, 'ddinstagram.com');
-    }
+    const text = String(content || '');
 
-    // 2. TikTok -> vxtiktok or similar
-    const tiktokRegex = /(https?:\/\/(www\.|vm\.|vt\.)?tiktok\.com\/[a-zA-Z0-9_-]+)/gi;
-    const tiktokMatch = content.match(tiktokRegex);
-    if (tiktokMatch) {
-        return tiktokMatch[0].replace(/tiktok\.com/i, 'vxtiktok.com');
-    }
+    const extractFirstUrl = (regex) => {
+        const match = text.match(regex);
+        if (!match || !match[0]) return null;
+        return String(match[0])
+            .replace(/[\s<>"'`]+$/g, '')
+            .replace(/[),.!?]+$/g, '')
+            .split('#')[0];
+    };
+
+    // Instagram -> ddinstagram
+    const instaUrl = extractFirstUrl(/https?:\/\/(?:www\.)?instagram\.com\/(?:reel|reels|p|tv)\/[A-Za-z0-9_-]+(?:\?[^\s]*)?/i);
+    if (instaUrl) return instaUrl.replace(/instagram\.com/i, 'ddinstagram.com');
+
+    // TikTok -> vxtiktok
+    const tiktokUrl = extractFirstUrl(/https?:\/\/(?:www\.|vm\.|vt\.)?tiktok\.com\/(?:@[^\s\/]+\/video\/\d+|t\/[A-Za-z0-9]+|[A-Za-z0-9_-]+)(?:\?[^\s]*)?/i);
+    if (tiktokUrl) return tiktokUrl.replace(/tiktok\.com/i, 'vxtiktok.com');
 
     return null;
 }
